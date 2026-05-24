@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"github.com/john221wick/gpuSchedularSN/internal/agent"
+	"github.com/john221wick/gpuSchedularSN/internal/scheduler"
 )
 
 func main() {
@@ -30,6 +31,17 @@ func main() {
 			fmt.Printf("\nTopology (%d links):\n", len(links))
 			for _, l := range links {
 				fmt.Printf("  GPU%d <-> GPU%d  %s  %.0f GB/s\n", l.GPUA, l.GPUB, l.Type, l.BandwidthGBps)
+			}
+		}
+
+		topo := scheduler.BuildTopology(devices, links)
+		if topo != nil {
+			fmt.Printf("\nScorer test: pick 2 GPUs\n")
+			result := scheduler.Score(topo, 2, 0)
+			if result != nil {
+				fmt.Printf("  Best group: %v  Score: %.0f GB/s\n", result.GPUIDs, result.Score)
+			} else {
+				fmt.Printf("  No valid group found\n")
 			}
 		}
 	}
