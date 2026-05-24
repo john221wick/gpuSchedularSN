@@ -8,6 +8,11 @@ The goal of this project is to make gpu schedular which would save waste of gpu 
 2. Fake gpu - For running in Nvidia gpus, i have added **gpu_fake.c** file, which containes four A100(80GB) and there is 2 NVLink, and 4 pcie connection
 3. Right now - I am running in macos so there is gpu detection in the beginning itself
 
+# Phase 2 and 3 done
+
+1. I added and tested topology matrix, which is basically for gpus which are made basically about connection of gpus to gpus
+2. Added a scorer, which basically finds the best combination of n gpus from the topology matrix with backtracking
+
 # Technical Decisions i took
 
 When building with Go + CGo, there is a problem. Go scans the package directory for `.c` files even when CGo is disabled (like when you do `go build -tags mock`). So if I put the C files next to the Go files, the mock build breaks. To fix this I put all C files in a subdirectory `internal/agent/gpu/` and reference them from the CGo bridge with `#cgo CFLAGS: -I${SRCDIR}/gpu` and `#include "gpu.c"`.
