@@ -12,7 +12,11 @@ coverage.out
 *.dylib
 *.dll
 *.exe
+!Makefile
 
 # Common generated binaries
 main
 a.out
+
+# Build output
+build/
