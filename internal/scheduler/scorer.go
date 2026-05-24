@@ -34,7 +34,9 @@ func Score(topo *Topology, numGPUs int, minVRAMMB uint64) *ScoredGroup {
 		}
 		if best == nil || score > best.Score {
 			gpuIDs := make([]int, len(combo))
-			copy(gpuIDs, combo)
+			for i, idx := range combo {
+				gpuIDs[i] = topo.Devices[idx].ID
+			}
 			best = &ScoredGroup{GPUIDs: gpuIDs, Score: score}
 		}
 	}
