@@ -41,6 +41,11 @@ func BuildEnv(gpuIDs []int, vendor agent.Vendor) []string {
 }
 
 func Launch(command string, args []string, gpuIDs []int, vendor agent.Vendor, onDone func(error)) error {
+	_, err := LaunchAsync(command, args, gpuIDs, vendor, onDone)
+	return err
+}
+
+func LaunchAsync(command string, args []string, gpuIDs []int, vendor agent.Vendor, onDone func(error)) (*exec.Cmd, error) {
 	env := BuildEnv(gpuIDs, vendor)
 
 	cmd := exec.Command(command, args...)
@@ -50,7 +55,7 @@ func Launch(command string, args []string, gpuIDs []int, vendor agent.Vendor, on
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start %s: %w", command, err)
+		return nil, fmt.Errorf("failed to start %s: %w", command, err)
 	}
 
 	go func() {
@@ -60,5 +65,5 @@ func Launch(command string, args []string, gpuIDs []int, vendor agent.Vendor, on
 		}
 	}()
 
-	return nil
+	return cmd, nil
 }

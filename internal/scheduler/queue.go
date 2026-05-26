@@ -83,3 +83,10 @@ func (q *JobQueue) PopJob() *Job {
 	}
 	return heap.Pop(q).(*Job)
 }
+
+func (q *JobQueue) PeekJob() *Job {
+	if q.Len() == 0 {
+		return nil
+	}
+	return (*q)[0]
+}

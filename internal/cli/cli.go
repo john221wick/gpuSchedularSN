@@ -16,6 +16,8 @@ import (
 
 const Version = "0.1.0"
 
+var GlobalState *state.State
+
 func Run(args []string) {
 	if len(args) == 0 {
 		printUsage()
@@ -179,8 +181,12 @@ func cmdRun(args []string) {
 	}
 
 	links := agent.GetTopology()
-	topo := scheduler.BuildTopology(devices, links)
 
+	if GlobalState == nil {
+		GlobalState = state.NewState(devices, links)
+	}
+
+	topo := scheduler.BuildTopology(devices, links)
 	result := scheduler.Score(topo, *gpus, minVRAMMB)
 	if result == nil {
 		fmt.Fprintf(os.Stderr, "error: cannot allocate %d GPU(s) with %dMB VRAM\n", *gpus, minVRAMMB)
@@ -189,12 +195,10 @@ func cmdRun(args []string) {
 	}
 
 	vendor := devices[0].Vendor
-	fmt.Printf("Allocated GPUs: %v (score: %.0f GB/s)\n", result.GPUIDs, result.Score)
-	fmt.Printf("Running: %s\n", strings.Join(cmdArgs, " "))
+	jobID := fmt.Sprintf("job-%d", time.Now().UnixNano())
 
-	st := state.NewState(devices, links)
 	job := &scheduler.Job{
-		ID:          fmt.Sprintf("job-%d", time.Now().UnixNano()),
+		ID:          jobID,
 		Command:     cmdArgs[0],
 		NumGPUs:     *gpus,
 		MinVRAMMB:   minVRAMMB,
@@ -204,33 +208,66 @@ func cmdRun(args []string) {
 		StartedAt:   time.Now(),
 		GPUIDs:      result.GPUIDs,
 	}
-	st.MarkRunning(job)
 
-	done := make(chan error, 1)
-	err = runner.Launch(cmdArgs[0], cmdArgs[1:], result.GPUIDs, vendor, func(e error) {
-		done <- e
+	GlobalState.AllocateGPUs(result.GPUIDs, jobID)
+	GlobalState.MarkRunning(job)
+
+	fmt.Printf("Allocated GPUs: %v (score: %.0f GB/s)\n", result.GPUIDs, result.Score)
+	fmt.Printf("Running: %s\n", strings.Join(cmdArgs, " "))
+
+	doneCh := make(chan error, 1)
+	GlobalState.StoreDoneCh(jobID, doneCh)
+
+	_, err = runner.LaunchAsync(cmdArgs[0], cmdArgs[1:], result.GPUIDs, vendor, func(e error) {
+		doneCh <- e
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		GlobalState.FreeGPUs(result.GPUIDs)
+		GlobalState.MarkFailed(jobID)
 		agent.Shutdown()
 		os.Exit(1)
 	}
 
-	e := <-done
+	e := <-doneCh
 	if e != nil {
 		fmt.Fprintf(os.Stderr, "process exited with error: %v\n", e)
-		st.MarkFailed(job.ID)
+		GlobalState.FreeGPUs(result.GPUIDs)
+		GlobalState.MarkFailed(jobID)
 		agent.Shutdown()
 		os.Exit(1)
 	}
 
 	fmt.Println("Done")
-	st.MarkDone(job.ID)
+	GlobalState.FreeGPUs(result.GPUIDs)
+	GlobalState.MarkDone(jobID)
 	agent.Shutdown()
 }
 
 func cmdStatus() {
-	fmt.Println("No jobs running (scheduler loop not started yet)")
+	if GlobalState == nil {
+		fmt.Println("No state initialized (run a job first)")
+		return
+	}
+
+	running := GlobalState.RunningJobs()
+	queueLen := GlobalState.QueueLen()
+
+	if len(running) == 0 && queueLen == 0 {
+		fmt.Println("No jobs running or queued")
+		return
+	}
+
+	if len(running) > 0 {
+		fmt.Printf("Running (%d):\n", len(running))
+		for id, job := range running {
+			fmt.Printf("  %s  %s  GPUs:%v\n", id, job.Command, job.GPUIDs)
+		}
+	}
+
+	if queueLen > 0 {
+		fmt.Printf("Queued: %d\n", queueLen)
+	}
 }
 
 func cmdKill(args []string) {
@@ -238,7 +275,20 @@ func cmdKill(args []string) {
 		fmt.Fprintf(os.Stderr, "usage: gpusched kill <jobID>\n")
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "kill not implemented yet (requires scheduler loop)\n")
+
+	if GlobalState == nil {
+		fmt.Fprintf(os.Stderr, "error: no state initialized\n")
+		os.Exit(1)
+	}
+
+	jobID := args[0]
+	err := GlobalState.KillJob(jobID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Killed job %s\n", jobID)
 }
 
 func cmdVersion() {
