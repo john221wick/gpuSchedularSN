@@ -13,6 +13,10 @@ The goal of this project is to make gpu schedular which would save waste of gpu 
 1. I added and tested topology matrix, which is basically for gpus which are made basically about connection of gpus to gpus
 2. Added a scorer, which basically finds the best combination of n gpus from the topology matrix with backtracking
 
+# Phase 4 done
+
+1. Added queue to handle the ongoing requests, for now the priority is set by int, lateron i will fix that
+
 # Technical Decisions i took
 
 When building with Go + CGo, there is a problem. Go scans the package directory for `.c` files even when CGo is disabled (like when you do `go build -tags mock`). So if I put the C files next to the Go files, the mock build breaks. To fix this I put all C files in a subdirectory `internal/agent/gpu/` and reference them from the CGo bridge with `#cgo CFLAGS: -I${SRCDIR}/gpu` and `#include "gpu.c"`.
