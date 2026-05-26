@@ -35,6 +35,16 @@ The goal of this project is to make gpu schedular which would save waste of gpu 
 2. The `run` command parses flags before `--` and everything after is the user command. So `gpusched run --gpus 2 -- python train.py` splits into flags (gpus=2) and command (python train.py)
 3. The VRAM flag accepts human readable formats like 40g, 512m, 1000 - converts to MB internally
 
+# Phase 8 done
+
+1. Added a background scheduler loop that runs every second. It checks the queue, and if there is a job waiting and enough free GPUs, it automatically picks it up, scores the best GPU group, and launches it
+2. This means you can submit multiple jobs and the scheduler will place them as GPUs free up
+
+# Phase 10 done
+
+1. Added signal handling - if you press Ctrl+C, it catches SIGINT and kills all running processes cleanly before exiting. No orphan processes left behind
+2. Added the kill command - `gpusched kill <jobID>` finds the running job and kills its entire process group with syscall.Kill
+
 # Technical Decisions i took
 
 When building with Go + CGo, there is a problem. Go scans the package directory for `.c` files even when CGo is disabled (like when you do `go build -tags mock`). So if I put the C files next to the Go files, the mock build breaks. To fix this I put all C files in a subdirectory `internal/agent/gpu/` and reference them from the CGo bridge with `#cgo CFLAGS: -I${SRCDIR}/gpu` and `#include "gpu.c"`.
