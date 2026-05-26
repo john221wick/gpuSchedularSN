@@ -1,0 +1,30 @@
+/*
+ * API client — wraps Wails Go bindings.
+ *
+ * During `wails dev`, Wails auto-generates JS bindings at
+ * frontend/wailsjs/go/desktop/App.js from the Go App struct.
+ *
+ * Each exported Go method becomes a callable JS function.
+ */
+
+import {
+	GetDevices,
+	GetFreeDevices,
+	GetTopology,
+	GetRunningJobs,
+	GetQueueLength,
+	SubmitJob,
+	KillJob,
+	GetDashboard
+} from '../../wailsjs/go/desktop/App.js';
+
+export {
+	GetDevices,
+	GetFreeDevices,
+	GetTopology,
+	GetRunningJobs,
+	GetQueueLength,
+	SubmitJob,
+	KillJob,
+	GetDashboard
+};
