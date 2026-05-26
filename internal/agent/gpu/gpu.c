@@ -1,107 +1,147 @@
+/*
+ * GPU dispatcher — routes to vendor-specific backends.
+ *
+ * Detection order: NVIDIA (NVML) → AMD (ROCm SMI) → Intel (Level Zero) → Apple (IOKit)
+ * On Linux, tries each vendor via dlopen. First one that returns GPUs wins.
+ * On macOS, only Apple backend is available.
+ */
+
 #include "gpu.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-#ifdef __APPLE__
-#include <sys/sysctl.h>
+/* ------------------------------------------------------------------ */
+/*  Vendor backend headers                                            */
+/* ------------------------------------------------------------------ */
+
+#ifdef __linux__
+#include "vendor/nvidia/nvml.h"
+#include "vendor/amd/rocm.h"
+#include "vendor/intel/levelzero.h"
 #endif
 
-static struct gpu_device detected_devices[1];
-static int               detected_count = 0;
-
 #ifdef __APPLE__
-
-static void detect_apple_gpu(struct gpu_device *dev) {
-	memset(dev, 0, sizeof(struct gpu_device));
-	dev->id = 0;
-	dev->vendor = GPU_VENDOR_APPLE;
-	dev->vendor_index = 0;
-
-	char name[128] = "Apple GPU";
-	char buf[256];
-	size_t len = sizeof(buf);
-	if (sysctlbyname("machdep.cpu.brand_string", buf, &len, NULL, 0) == 0) {
-		snprintf(name, sizeof(name), "%s (GPU)", buf);
-	}
-	strncpy(dev->name, name, 127);
-
-	int cores = 0;
-	len = sizeof(cores);
-	sysctlbyname("hw.ncpu", &cores, &len, NULL, 0);
-	dev->temperature_c = 0;
-
-	long long memsize = 0;
-	len = sizeof(memsize);
-	if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0) {
-		dev->vram_total_mb = (uint64_t)(memsize / (1024 * 1024));
-	}
-	dev->vram_used_mb = 0;
-	dev->utilization_pct = 0.0f;
-}
-
+#include "vendor/apple/metal.h"
 #endif
 
-static int detect_gpus(void) {
-	if (detected_count > 0) return detected_count;
+/* ------------------------------------------------------------------ */
+/*  Active backend tracking                                           */
+/* ------------------------------------------------------------------ */
 
-#ifdef __APPLE__
-	detect_apple_gpu(&detected_devices[0]);
-	detected_count = 1;
-#elif __linux__
-	FILE *f = fopen("/sys/bus/pci/devices/0000:01:00.0/vendor", "r");
-	if (f) {
-		char vendor_str[16] = {0};
-		if (fgets(vendor_str, sizeof(vendor_str), f)) {
-			if (strstr(vendor_str, "0x10de")) {
-				detected_devices[0].vendor = GPU_VENDOR_NVIDIA;
-				strncpy(detected_devices[0].name, "NVIDIA GPU (detected)", 127);
-			} else if (strstr(vendor_str, "0x1002")) {
-				detected_devices[0].vendor = GPU_VENDOR_AMD;
-				strncpy(detected_devices[0].name, "AMD GPU (detected)", 127);
-			} else if (strstr(vendor_str, "0x8086")) {
-				detected_devices[0].vendor = GPU_VENDOR_INTEL;
-				strncpy(detected_devices[0].name, "Intel GPU (detected)", 127);
-			}
-			detected_devices[0].id = 0;
-			detected_devices[0].vendor_index = 0;
-			detected_devices[0].vram_total_mb = 0;
-			detected_devices[0].vram_used_mb = 0;
-			detected_devices[0].utilization_pct = 0.0f;
-			detected_devices[0].temperature_c = 0;
-			detected_count = 1;
-		}
-		fclose(f);
-	}
-#endif
+typedef enum {
+    BACKEND_NONE = 0,
+    BACKEND_NVIDIA,
+    BACKEND_AMD,
+    BACKEND_INTEL,
+    BACKEND_APPLE
+} active_backend_t;
 
-	return detected_count;
-}
+static active_backend_t active_backend = BACKEND_NONE;
+static int              active_count   = 0;
+
+/* ------------------------------------------------------------------ */
+/*  Public API                                                        */
+/* ------------------------------------------------------------------ */
 
 int gpu_init(void) {
-	return detect_gpus();
+    if (active_backend != BACKEND_NONE) return active_count;
+
+#ifdef __linux__
+    /* Try NVIDIA first */
+    int n = nvml_detect();
+    if (n > 0) {
+        active_backend = BACKEND_NVIDIA;
+        active_count = n;
+        return n;
+    }
+
+    /* Try AMD */
+    n = rocm_detect();
+    if (n > 0) {
+        active_backend = BACKEND_AMD;
+        active_count = n;
+        return n;
+    }
+
+    /* Try Intel */
+    n = ze_detect();
+    if (n > 0) {
+        active_backend = BACKEND_INTEL;
+        active_count = n;
+        return n;
+    }
+#endif
+
+#ifdef __APPLE__
+    if (apple_detect()) {
+        active_backend = BACKEND_APPLE;
+        active_count = 1;
+        return 1;
+    }
+#endif
+
+    return 0;
 }
 
 int gpu_num_devices(void) {
-	return detected_count;
+    return active_count;
 }
 
 int gpu_get_devices(struct gpu_device *out, int max_devices) {
-	int n = detected_count;
-	if (n > max_devices) n = max_devices;
-	memcpy(out, detected_devices, n * sizeof(struct gpu_device));
-	return n;
+    switch (active_backend) {
+#ifdef __linux__
+        case BACKEND_NVIDIA: return nvml_enumerate(out, max_devices);
+        case BACKEND_AMD:    return rocm_enumerate(out, max_devices);
+        case BACKEND_INTEL:  return ze_enumerate(out, max_devices);
+#endif
+#ifdef __APPLE__
+        case BACKEND_APPLE:  return apple_enumerate(out, max_devices);
+#endif
+        default: return 0;
+    }
 }
 
 int gpu_get_topology(struct gpu_link *out, int max_links) {
-	(void)out;
-	(void)max_links;
-	return 0;
+    switch (active_backend) {
+#ifdef __linux__
+        case BACKEND_NVIDIA: return nvml_topology(out, max_links, active_count);
+        case BACKEND_AMD:    return rocm_topology(out, max_links, active_count);
+        case BACKEND_INTEL:  return ze_topology(out, max_links, active_count);
+#endif
+#ifdef __APPLE__
+        case BACKEND_APPLE:  return apple_topology(out, max_links, active_count);
+#endif
+        default: return 0;
+    }
 }
 
 int gpu_refresh(struct gpu_device *out, int max_devices) {
-	return gpu_get_devices(out, max_devices);
+    switch (active_backend) {
+#ifdef __linux__
+        case BACKEND_NVIDIA: return nvml_refresh(out, max_devices);
+        case BACKEND_AMD:    return rocm_refresh(out, max_devices);
+        case BACKEND_INTEL:  return ze_refresh(out, max_devices);
+#endif
+#ifdef __APPLE__
+        case BACKEND_APPLE:  return apple_refresh(out, max_devices);
+#endif
+        default: return 0;
+    }
 }
 
 void gpu_shutdown(void) {
+    switch (active_backend) {
+#ifdef __linux__
+        case BACKEND_NVIDIA: nvml_shutdown(); break;
+        case BACKEND_AMD:    rocm_shutdown(); break;
+        case BACKEND_INTEL:  ze_shutdown(); break;
+#endif
+#ifdef __APPLE__
+        case BACKEND_APPLE:  apple_shutdown(); break;
+#endif
+        default: break;
+    }
+    active_backend = BACKEND_NONE;
+    active_count = 0;
 }

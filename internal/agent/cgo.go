@@ -4,7 +4,13 @@ package agent
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/gpu
+#cgo linux LDFLAGS: -ldl
+#cgo darwin LDFLAGS: -framework IOKit -framework CoreFoundation
 #include "gpu.h"
+#include "vendor/nvidia/nvml.c"
+#include "vendor/amd/rocm.c"
+#include "vendor/intel/levelzero.c"
+#include "vendor/apple/metal.c"
 #include "gpu.c"
 #include <stdlib.h>
 */
