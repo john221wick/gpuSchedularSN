@@ -17,6 +17,18 @@ The goal of this project is to make gpu schedular which would save waste of gpu 
 
 1. Added queue to handle the ongoing requests, for now the priority is set by int, lateron i will fix that
 
+# Phase 5 done
+
+1. Added a central state struct that ties everything together - topology, queue, running jobs, and which GPUs are allocated. All thread safe with a mutex
+2. You can submit a job to the queue, allocate GPUs to it, free them when done, and check which GPUs are free
+
+# Phase 6 done
+
+1. Added a process launcher that actually runs your command. It sets the right env vars based on your GPU vendor - CUDA_VISIBLE_DEVICES for NVIDIA, HIP_VISIBLE_DEVICES for AMD, etc
+2. For Apple it doesnt set anything since there is only one GPU and Metal handles it
+3. Each process runs in its own process group so we can kill it cleanly later (no orphan processes)
+4. It runs async - starts the process and calls a callback when it exits, so the scheduler can keep working while a job is running
+
 # Technical Decisions i took
 
 When building with Go + CGo, there is a problem. Go scans the package directory for `.c` files even when CGo is disabled (like when you do `go build -tags mock`). So if I put the C files next to the Go files, the mock build breaks. To fix this I put all C files in a subdirectory `internal/agent/gpu/` and reference them from the CGo bridge with `#cgo CFLAGS: -I${SRCDIR}/gpu` and `#include "gpu.c"`.
