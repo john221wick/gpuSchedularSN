@@ -3,8 +3,6 @@
  *
  * During `wails dev`, Wails auto-generates JS bindings at
  * frontend/wailsjs/go/desktop/App.js from the Go App struct.
- *
- * Each exported Go method becomes a callable JS function.
  */
 
 import {
