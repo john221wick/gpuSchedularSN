@@ -216,7 +216,6 @@ func cmdRun(args []string) {
 	fmt.Printf("Running: %s\n", strings.Join(cmdArgs, " "))
 
 	doneCh := make(chan error, 1)
-	GlobalState.StoreDoneCh(jobID, doneCh)
 
 	_, err = runner.LaunchAsync(cmdArgs[0], cmdArgs[1:], result.GPUIDs, vendor, func(e error) {
 		doneCh <- e

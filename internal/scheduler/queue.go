@@ -32,6 +32,7 @@ func (s JobStatus) String() string {
 type Job struct {
 	ID          string
 	Command     string
+	ExecCommand string
 	NumGPUs     int
 	MinVRAMMB   uint64
 	Priority    int
@@ -82,6 +83,16 @@ func (q *JobQueue) PopJob() *Job {
 		return nil
 	}
 	return heap.Pop(q).(*Job)
+}
+
+func (q *JobQueue) RemoveByID(id string) *Job {
+	for i, job := range *q {
+		if job.ID == id {
+			heap.Remove(q, i)
+			return job
+		}
+	}
+	return nil
 }
 
 func (q *JobQueue) PeekJob() *Job {

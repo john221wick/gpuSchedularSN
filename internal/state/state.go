@@ -25,10 +25,10 @@ type State struct {
 	queue        scheduler.JobQueue
 	running      map[string]*scheduler.Job
 	runningProcs map[string]*runningProc
+	completed    []*scheduler.Job
 	allocated    map[int]string
 	stopCh       chan struct{}
 	loopRunning  bool
-	doneCh       map[string]chan error
 }
 
 func NewState(devices []agent.GPUDevice, links []agent.GPULink) *State {
@@ -42,7 +42,6 @@ func NewState(devices []agent.GPUDevice, links []agent.GPULink) *State {
 		running:      make(map[string]*scheduler.Job),
 		runningProcs: make(map[string]*runningProc),
 		allocated:    make(map[int]string),
-		doneCh:       make(map[string]chan error),
 	}
 }
 
@@ -101,6 +100,38 @@ func (s *State) QueueLen() int {
 	return s.queue.Len()
 }
 
+func (s *State) QueuedJobs() []*scheduler.Job {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	jobs := make([]*scheduler.Job, s.queue.Len())
+	for i := range s.queue {
+		jobs[i] = s.queue[i]
+	}
+	return jobs
+}
+
+func (s *State) RemoveQueuedJob(jobID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.queue.RemoveByID(jobID)
+	if job == nil {
+		return fmt.Errorf("job %s not found in queue", jobID)
+	}
+	return nil
+}
+
+func (s *State) UpdateQueuedPriority(jobID string, newPriority int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.queue.RemoveByID(jobID)
+	if job == nil {
+		return fmt.Errorf("job %s not found in queue", jobID)
+	}
+	job.Priority = newPriority
+	s.queue.PushJob(job)
+	return nil
+}
+
 func (s *State) PopJob() *scheduler.Job {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -117,21 +148,33 @@ func (s *State) MarkRunning(job *scheduler.Job) {
 func (s *State) MarkDone(jobID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if job, ok := s.running[jobID]; ok {
-		job.Status = scheduler.Done
-		delete(s.running, jobID)
-		delete(s.runningProcs, jobID)
-	}
+	s.finishRunningJobLocked(jobID, scheduler.Done)
 }
 
 func (s *State) MarkFailed(jobID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.finishRunningJobLocked(jobID, scheduler.Failed)
+}
+
+func (s *State) finishRunningJobLocked(jobID string, status scheduler.JobStatus) {
 	if job, ok := s.running[jobID]; ok {
-		job.Status = scheduler.Failed
+		job.Status = status
+		for _, id := range job.GPUIDs {
+			delete(s.allocated, id)
+		}
+		s.completed = append(s.completed, job)
 		delete(s.running, jobID)
 		delete(s.runningProcs, jobID)
 	}
+}
+
+func (s *State) CompletedJobs() []*scheduler.Job {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]*scheduler.Job, len(s.completed))
+	copy(result, s.completed)
+	return result
 }
 
 func (s *State) RunningJobs() map[string]*scheduler.Job {
@@ -148,18 +191,6 @@ func (s *State) StoreProc(jobID string, cmd *exec.Cmd, job *scheduler.Job) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runningProcs[jobID] = &runningProc{job: job, cmd: cmd}
-}
-
-func (s *State) StoreDoneCh(jobID string, ch chan error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.doneCh[jobID] = ch
-}
-
-func (s *State) GetDoneCh(jobID string) chan error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.doneCh[jobID]
 }
 
 func (s *State) StartSchedulerLoop() {
@@ -205,6 +236,13 @@ func (s *State) tick() {
 		return
 	}
 
+	// Check all scored GPUs are actually free
+	for _, id := range result.GPUIDs {
+		if _, taken := s.allocated[id]; taken {
+			return
+		}
+	}
+
 	job := s.queue.PopJob()
 	job.GPUIDs = result.GPUIDs
 	job.Status = scheduler.Running
@@ -216,24 +254,30 @@ func (s *State) tick() {
 	}
 
 	vendor := s.devices[0].Vendor
-	doneCh := make(chan error, 1)
-	s.doneCh[job.ID] = doneCh
+	jobID := job.ID
+	gpuIDs := result.GPUIDs
 
-	go func() {
-		cmd, err := runner.LaunchAsync(job.Command, nil, result.GPUIDs, vendor, func(e error) {
-			doneCh <- e
-		})
-		if err != nil {
-			s.mu.Lock()
-			s.runningProcs[job.ID] = nil
-			s.mu.Unlock()
-			doneCh <- err
+	command := job.Command
+	if job.ExecCommand != "" {
+		command = job.ExecCommand
+	}
+
+	cmd, err := runner.LaunchAsync(command, nil, gpuIDs, vendor, func(e error) {
+		if e != nil {
+			s.MarkFailed(jobID)
 			return
 		}
-		s.mu.Lock()
-		s.runningProcs[job.ID] = &runningProc{job: job, cmd: cmd}
-		s.mu.Unlock()
-	}()
+		s.MarkDone(jobID)
+	})
+	if err != nil {
+		s.finishRunningJobLocked(jobID, scheduler.Failed)
+		return
+	}
+
+	if cmd.Process != nil {
+		job.PID = cmd.Process.Pid
+	}
+	s.runningProcs[jobID] = &runningProc{job: job, cmd: cmd}
 }
 
 func (s *State) Stop() {
@@ -255,20 +299,25 @@ func (s *State) Stop() {
 
 func (s *State) KillJob(jobID string) error {
 	s.mu.Lock()
-	proc, ok := s.runningProcs[jobID]
-	if !ok {
-		s.mu.Unlock()
+	defer s.mu.Unlock()
+
+	_, jobExists := s.running[jobID]
+	if !jobExists {
 		return fmt.Errorf("job %s not found", jobID)
 	}
 
-	if proc != nil && proc.cmd != nil && proc.cmd.Process != nil {
-		syscall.Kill(-proc.cmd.Process.Pid, syscall.SIGKILL)
+	proc := s.runningProcs[jobID]
+	if proc == nil || proc.cmd == nil || proc.cmd.Process == nil {
+		return fmt.Errorf("job %s process is not ready", jobID)
 	}
 
-	gpuIDs := proc.job.GPUIDs
-	s.mu.Unlock()
+	pid := proc.cmd.Process.Pid
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
+		if fallbackErr := syscall.Kill(pid, syscall.SIGKILL); fallbackErr != nil {
+			return fmt.Errorf("failed to kill job %s (process group: %v, process: %w)", jobID, err, fallbackErr)
+		}
+	}
 
-	s.FreeGPUs(gpuIDs)
-	s.MarkFailed(jobID)
+	s.finishRunningJobLocked(jobID, scheduler.Failed)
 	return nil
 }

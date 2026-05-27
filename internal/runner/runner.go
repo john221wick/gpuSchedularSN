@@ -48,7 +48,13 @@ func Launch(command string, args []string, gpuIDs []int, vendor agent.Vendor, on
 func LaunchAsync(command string, args []string, gpuIDs []int, vendor agent.Vendor, onDone func(error)) (*exec.Cmd, error) {
 	env := BuildEnv(gpuIDs, vendor)
 
-	cmd := exec.Command(command, args...)
+	var cmd *exec.Cmd
+	if len(args) == 0 {
+		// Command is a full shell string like "python3 main.py --epochs 10"
+		cmd = exec.Command("sh", "-c", command)
+	} else {
+		cmd = exec.Command(command, args...)
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(), env...)

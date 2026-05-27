@@ -5,6 +5,7 @@
 	import Topology from './pages/Topology.svelte';
 	import Jobs from './pages/Jobs.svelte';
 	import Submit from './pages/Submit.svelte';
+	import Settings from './pages/Settings.svelte';
 
 	let page = $state('dashboard');
 	let dark = $state(true);
@@ -15,7 +16,8 @@
 		'devices': 'devices',
 		'topology': 'topology',
 		'jobs': 'jobs',
-		'submit': 'submit'
+		'submit': 'submit',
+		'settings': 'settings'
 	};
 
 	function handleHash() {
@@ -64,7 +66,7 @@
 		</div>
 
 		<nav class="flex-1 px-3 space-y-0.5">
-			{#each nav as item}
+			{#each nav as item (item.route)}
 				<button
 					onclick={() => navigate(item.route)}
 					class="block w-full text-left px-3 py-2 rounded-md text-[13px] font-medium transition-colors cursor-pointer"
@@ -79,21 +81,15 @@
 
 		<div class="px-4 py-3 space-y-3" style="border-top: 1px solid var(--border);">
 			<button
-				onclick={toggleTheme}
+				onclick={() => navigate('settings')}
 				class="flex items-center gap-2 text-[12px] font-medium cursor-pointer w-full rounded-md px-2 py-1.5 transition-colors"
-				style="color: var(--text-secondary); background: var(--bg-tertiary);"
+				style="color: {page === 'settings' ? 'var(--text-primary)' : 'var(--text-secondary)'}; background: {page === 'settings' ? 'var(--hover-bg)' : 'var(--bg-tertiary)'};"
 			>
-				{#if dark}
-					<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-					</svg>
-					Light mode
-				{:else}
-					<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-					</svg>
-					Dark mode
-				{/if}
+				<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+					<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+				</svg>
+				Settings
 			</button>
 			<div class="text-[11px] font-mono px-2" style="color: var(--text-muted);">v0.1.0</div>
 		</div>
@@ -111,6 +107,8 @@
 			<Jobs />
 		{:else if page === 'submit'}
 			<Submit />
+		{:else if page === 'settings'}
+			<Settings {dark} {toggleTheme} />
 		{/if}
 	</main>
 </div>

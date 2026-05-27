@@ -100,6 +100,7 @@ export namespace desktop {
 	}
 	export class SubmitRequest {
 	    command: string;
+	    pathVariable: string;
 	    numGPUs: number;
 	    minVRAMMB: number;
 	    priority: number;
@@ -111,6 +112,7 @@ export namespace desktop {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.command = source["command"];
+	        this.pathVariable = source["pathVariable"];
 	        this.numGPUs = source["numGPUs"];
 	        this.minVRAMMB = source["minVRAMMB"];
 	        this.priority = source["priority"];

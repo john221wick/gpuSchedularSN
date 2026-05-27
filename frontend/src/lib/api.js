@@ -10,9 +10,13 @@ import {
 	GetFreeDevices,
 	GetTopology,
 	GetRunningJobs,
+	GetCompletedJobs,
+	GetQueuedJobs,
 	GetQueueLength,
 	SubmitJob,
 	KillJob,
+	RemoveQueuedJob,
+	UpdateQueuedPriority,
 	GetDashboard
 } from '../../wailsjs/go/desktop/App.js';
 
@@ -21,8 +25,12 @@ export {
 	GetFreeDevices,
 	GetTopology,
 	GetRunningJobs,
+	GetCompletedJobs,
+	GetQueuedJobs,
 	GetQueueLength,
 	SubmitJob,
 	KillJob,
+	RemoveQueuedJob,
+	UpdateQueuedPriority,
 	GetDashboard
 };
