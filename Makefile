@@ -30,6 +30,10 @@ desktop: frontend
 desktop-dev:
 	cd cmd/desktop && wails dev
 
+desktop-mock:
+	cd cmd/desktop && wails dev -tags mock
+
+
 # --- Test ---
 
 test:

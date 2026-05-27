@@ -45,6 +45,13 @@ The goal of this project is to make gpu schedular which would save waste of gpu 
 1. Added signal handling - if you press Ctrl+C, it catches SIGINT and kills all running processes cleanly before exiting. No orphan processes left behind
 2. Added the kill command - `gpusched kill <jobID>` finds the running job and kills its entire process group with syscall.Kill
 
+# Desktop App done
+
+1. Built a desktop app using Wails v2 - it wraps the Svelte frontend in a native window and bridges Go methods to JavaScript
+2. Frontend is Svelte 5 with Tailwind CSS. Has pages for Dashboard, Devices, Topology, Jobs, and Submit
+3. Dashboard auto-refreshes every 2 seconds, shows GPU stats, running jobs, VRAM usage
+4. Dark and light theme toggle, stored in localStorage
+
 # Technical Decisions i took
 
 When building with Go + CGo, there is a problem. Go scans the package directory for `.c` files even when CGo is disabled (like when you do `go build -tags mock`). So if I put the C files next to the Go files, the mock build breaks. To fix this I put all C files in a subdirectory `internal/agent/gpu/` and reference them from the CGo bridge with `#cgo CFLAGS: -I${SRCDIR}/gpu` and `#include "gpu.c"`.
@@ -66,3 +73,5 @@ For the CLI I used a global state variable so the run, status, and kill commands
 For the scheduler loop, I used a goroutine with a 1-second ticker. Each tick it checks if the top job in the queue can be placed. I used PeekJob to look at the top without popping, so if there arent enough free GPUs the job stays in the queue. Only when the scorer returns a valid group do I pop the job and launch it. The loop also stores the process reference (exec.Cmd) so we can kill it later.
 
 For signal handling, I catch SIGINT and SIGTERM in main.go with a goroutine that waits on a signal channel. When it fires, it calls state.Stop() which kills all running process groups and exits cleanly. For the kill command, I used syscall.Kill(-pid, SIGKILL) with the negative PID to kill the entire process group, not just the parent. This is why I used Setpgid: true when launching processes - it creates the process group that we can kill later.
+
+For the desktop app I used Wails v2 which lets you build desktop apps with Go backend and any web frontend. I went with Svelte because it compiles to vanilla JS so the bundle is tiny, and Tailwind CSS for styling. Every exported method in app.go becomes callable from the Svelte frontend via Wails bindings - no REST API needed, the bridge handles everything. The desktop app embeds the built Svelte dist folder into the Go binary so it ships as one executable.
