@@ -182,3 +182,60 @@ func TestKillJobKillsProcessAndFreesGPUs(t *testing.T) {
 		t.Errorf("completed status = %s, want Failed", completed[0].Status)
 	}
 }
+
+func TestStopKillsRunningProcessAndFreesGPUs(t *testing.T) {
+	s := NewState(mockDevices(), mockLinks())
+	job := &scheduler.Job{
+		ID:          "stop-me",
+		Command:     "sleep 30",
+		NumGPUs:     1,
+		Priority:    1,
+		Status:      scheduler.Running,
+		SubmittedAt: time.Now(),
+		StartedAt:   time.Now(),
+		GPUIDs:      []int{0},
+	}
+
+	s.AllocateGPUs(job.GPUIDs, job.ID)
+	s.MarkRunning(job)
+
+	cmd := exec.Command("sh", "-c", "sleep 30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start test process: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	s.mu.Lock()
+	s.runningProcs[job.ID] = &runningProc{job: job, cmd: cmd, done: done}
+	s.mu.Unlock()
+
+	s.Stop()
+	s.Stop()
+
+	if cmd.ProcessState == nil {
+		t.Fatal("process was still running after Stop")
+	}
+
+	if !s.IsStopping() {
+		t.Fatal("state should be marked stopping after Stop")
+	}
+	if running := s.RunningJobs(); len(running) != 0 {
+		t.Errorf("running jobs = %d, want 0 after Stop", len(running))
+	}
+	if !s.IsGPUFree(0) {
+		t.Error("GPU 0 should be free after Stop")
+	}
+
+	completed := s.CompletedJobs()
+	if len(completed) != 1 {
+		t.Fatalf("completed jobs = %d, want 1", len(completed))
+	}
+	if completed[0].Status != scheduler.Failed {
+		t.Errorf("completed status = %s, want Failed", completed[0].Status)
+	}
+}

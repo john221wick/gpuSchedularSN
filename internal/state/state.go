@@ -13,8 +13,9 @@ import (
 )
 
 type runningProc struct {
-	job *scheduler.Job
-	cmd *exec.Cmd
+	job  *scheduler.Job
+	cmd  *exec.Cmd
+	done <-chan error
 }
 
 type State struct {
@@ -29,6 +30,7 @@ type State struct {
 	allocated    map[int]string
 	stopCh       chan struct{}
 	loopRunning  bool
+	stopping     bool
 }
 
 func NewState(devices []agent.GPUDevice, links []agent.GPULink) *State {
@@ -200,6 +202,7 @@ func (s *State) StartSchedulerLoop() {
 		return
 	}
 	s.loopRunning = true
+	s.stopping = false
 	s.stopCh = make(chan struct{})
 	s.mu.Unlock()
 
@@ -208,6 +211,12 @@ func (s *State) StartSchedulerLoop() {
 		defer ticker.Stop()
 
 		for {
+			select {
+			case <-s.stopCh:
+				return
+			default:
+			}
+
 			select {
 			case <-s.stopCh:
 				return
@@ -221,6 +230,10 @@ func (s *State) StartSchedulerLoop() {
 func (s *State) tick() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.stopping {
+		return
+	}
 
 	if s.queue.Len() == 0 {
 		return
@@ -262,7 +275,12 @@ func (s *State) tick() {
 		command = job.ExecCommand
 	}
 
+	doneCh := make(chan error, 1)
 	cmd, err := runner.LaunchAsync(command, nil, gpuIDs, vendor, func(e error) {
+		doneCh <- e
+		if s.IsStopping() {
+			return
+		}
 		if e != nil {
 			s.MarkFailed(jobID)
 			return
@@ -277,24 +295,46 @@ func (s *State) tick() {
 	if cmd.Process != nil {
 		job.PID = cmd.Process.Pid
 	}
-	s.runningProcs[jobID] = &runningProc{job: job, cmd: cmd}
+	s.runningProcs[jobID] = &runningProc{job: job, cmd: cmd, done: doneCh}
 }
 
 func (s *State) Stop() {
 	s.mu.Lock()
-	if !s.loopRunning {
+	if s.stopping {
 		s.mu.Unlock()
 		return
 	}
-	close(s.stopCh)
+	s.stopping = true
+	if s.loopRunning && s.stopCh != nil {
+		close(s.stopCh)
+	}
 	s.loopRunning = false
 
+	procs := make([]*runningProc, 0, len(s.runningProcs))
 	for _, proc := range s.runningProcs {
-		if proc != nil && proc.cmd != nil && proc.cmd.Process != nil {
-			syscall.Kill(-proc.cmd.Process.Pid, syscall.SIGKILL)
+		if proc != nil {
+			procs = append(procs, proc)
 		}
 	}
+
+	for jobID := range s.running {
+		s.finishRunningJobLocked(jobID, scheduler.Failed)
+	}
 	s.mu.Unlock()
+
+	for _, proc := range procs {
+		if proc == nil || proc.cmd == nil || proc.cmd.Process == nil {
+			continue
+		}
+		_ = killProcessTree(proc.cmd.Process.Pid)
+		waitForProcessDone(proc, 2*time.Second)
+	}
+}
+
+func (s *State) IsStopping() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stopping
 }
 
 func (s *State) KillJob(jobID string) error {
@@ -312,12 +352,42 @@ func (s *State) KillJob(jobID string) error {
 	}
 
 	pid := proc.cmd.Process.Pid
-	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
-		if fallbackErr := syscall.Kill(pid, syscall.SIGKILL); fallbackErr != nil {
-			return fmt.Errorf("failed to kill job %s (process group: %v, process: %w)", jobID, err, fallbackErr)
-		}
+	if err := killProcessTree(pid); err != nil {
+		return fmt.Errorf("failed to kill job %s: %w", jobID, err)
 	}
 
 	s.finishRunningJobLocked(jobID, scheduler.Failed)
 	return nil
+}
+
+func killProcessTree(pid int) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid pid %d", pid)
+	}
+
+	groupErr := syscall.Kill(-pid, syscall.SIGKILL)
+	if groupErr == nil {
+		return nil
+	}
+
+	processErr := syscall.Kill(pid, syscall.SIGKILL)
+	if processErr == nil || processErr == syscall.ESRCH {
+		return nil
+	}
+
+	return fmt.Errorf("process group: %v, process: %w", groupErr, processErr)
+}
+
+func waitForProcessDone(proc *runningProc, timeout time.Duration) {
+	if proc.done == nil {
+		return
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-proc.done:
+	case <-timer.C:
+	}
 }
