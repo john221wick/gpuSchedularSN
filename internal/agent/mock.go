@@ -2,30 +2,53 @@
 
 package agent
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
+
+var mockGPUCount = 4
 
 func Init() (int, error) {
-	return 4, nil
+	if env := os.Getenv("GPUSCHED_MOCK_GPUS"); env != "" {
+		if n, err := strconv.Atoi(env); err == nil && n > 0 && n <= 32 {
+			mockGPUCount = n
+		}
+	}
+	return mockGPUCount, nil
 }
 
 func GetDevices() []GPUDevice {
-	return []GPUDevice{
-		{ID: 0, Vendor: NVIDIA, Name: "NVIDIA A100-SXM4-80GB", VRAMTotalMB: 80000, VRAMUsedMB: 0, UtilizationPct: 0, TemperatureC: 35, VendorIndex: 0},
-		{ID: 1, Vendor: NVIDIA, Name: "NVIDIA A100-SXM4-80GB", VRAMTotalMB: 80000, VRAMUsedMB: 0, UtilizationPct: 0, TemperatureC: 35, VendorIndex: 1},
-		{ID: 2, Vendor: NVIDIA, Name: "NVIDIA A100-SXM4-80GB", VRAMTotalMB: 80000, VRAMUsedMB: 0, UtilizationPct: 0, TemperatureC: 35, VendorIndex: 2},
-		{ID: 3, Vendor: NVIDIA, Name: "NVIDIA A100-SXM4-80GB", VRAMTotalMB: 80000, VRAMUsedMB: 0, UtilizationPct: 0, TemperatureC: 35, VendorIndex: 3},
+	devices := make([]GPUDevice, mockGPUCount)
+	for i := 0; i < mockGPUCount; i++ {
+		devices[i] = GPUDevice{
+			ID:             i,
+			Vendor:         NVIDIA,
+			Name:           "NVIDIA A100-SXM4-80GB",
+			VRAMTotalMB:    80000,
+			VRAMUsedMB:     0,
+			UtilizationPct: 0,
+			TemperatureC:   35,
+			VendorIndex:    i,
+		}
 	}
+	return devices
 }
 
 func GetTopology() []GPULink {
-	return []GPULink{
-		{GPUA: 0, GPUB: 1, Type: NVLink, BandwidthGBps: 600},
-		{GPUA: 2, GPUB: 3, Type: NVLink, BandwidthGBps: 600},
-		{GPUA: 0, GPUB: 2, Type: PCIe, BandwidthGBps: 32},
-		{GPUA: 0, GPUB: 3, Type: PCIe, BandwidthGBps: 32},
-		{GPUA: 1, GPUB: 2, Type: PCIe, BandwidthGBps: 32},
-		{GPUA: 1, GPUB: 3, Type: PCIe, BandwidthGBps: 32},
+	var links []GPULink
+	for i := 0; i < mockGPUCount; i++ {
+		for j := i + 1; j < mockGPUCount; j++ {
+			// Pair GPUs (0,1), (2,3), (4,5)... with NVLink; cross-pair with PCIe
+			if i/2 == j/2 && j == i+1 {
+				links = append(links, GPULink{GPUA: i, GPUB: j, Type: NVLink, BandwidthGBps: 600})
+			} else {
+				links = append(links, GPULink{GPUA: i, GPUB: j, Type: PCIe, BandwidthGBps: 32})
+			}
+		}
 	}
+	return links
 }
 
 func Refresh() []GPUDevice {

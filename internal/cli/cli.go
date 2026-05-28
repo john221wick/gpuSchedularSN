@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/john221wick/gpuSchedularSN/internal/agent"
+	"github.com/john221wick/gpuSchedularSN/internal/cluster"
 	"github.com/john221wick/gpuSchedularSN/internal/runner"
 	"github.com/john221wick/gpuSchedularSN/internal/scheduler"
 	"github.com/john221wick/gpuSchedularSN/internal/state"
@@ -17,6 +18,8 @@ import (
 const Version = "0.1.0"
 
 var GlobalState *state.State
+var ClusterMgr *cluster.NodeManager
+var ClusterSched *cluster.ClusterScheduler
 
 func Run(args []string) {
 	if len(args) == 0 {
@@ -35,6 +38,12 @@ func Run(args []string) {
 		cmdStatus()
 	case "kill":
 		cmdKill(args[1:])
+	case "connect":
+		cmdConnect(args[1:])
+	case "nodes":
+		cmdNodes()
+	case "logs":
+		cmdLogs(args[1:])
 	case "version":
 		cmdVersion()
 	default:
@@ -53,6 +62,9 @@ func printUsage() {
 	fmt.Println("  run       Run a command on allocated GPUs")
 	fmt.Println("  status    Show running/queued jobs")
 	fmt.Println("  kill      Kill a running job")
+	fmt.Println("  connect   Connect to a remote agent node")
+	fmt.Println("  nodes     List connected nodes")
+	fmt.Println("  logs      View job logs")
 	fmt.Println("  version   Print version")
 }
 
@@ -292,6 +304,203 @@ func cmdKill(args []string) {
 
 func cmdVersion() {
 	fmt.Printf("gpusched %s\n", Version)
+}
+
+// initCluster ensures NodeManager and ClusterScheduler are initialized.
+func initCluster() {
+	if ClusterMgr == nil {
+		ClusterMgr = cluster.NewNodeManager()
+		ClusterSched = cluster.NewClusterScheduler(ClusterMgr)
+	}
+}
+
+func cmdConnect(args []string) {
+	fs := flag.NewFlagSet("connect", flag.ExitOnError)
+	direct := fs.String("direct", "", "direct TCP address (host:port) — skip SSH, for testing")
+	key := fs.String("key", "", "path to SSH private key")
+	fs.Parse(args)
+
+	initCluster()
+
+	if *direct != "" {
+		// Direct TCP connection — no SSH, for local testing
+		url := "http://" + *direct
+		client := cluster.NewAgentClient(url)
+		nodeID := fmt.Sprintf("direct-%s", *direct)
+
+		node, err := ClusterMgr.AddRemoteNode(nodeID, *direct, client)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Connected to %s: %d GPUs\n", node.Name, len(node.Devices))
+		return
+	}
+
+	// SSH connection
+	remaining := fs.Args()
+	if len(remaining) == 0 {
+		fmt.Fprintf(os.Stderr, "usage: gpusched connect \"ssh -p PORT user@host\" [--key path]\n")
+		fmt.Fprintf(os.Stderr, "       gpusched connect --direct host:port\n")
+		os.Exit(1)
+	}
+
+	rawSSH := remaining[0]
+	config, err := cluster.ParseSSHCommand(rawSSH)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error parsing SSH command: %v\n", err)
+		os.Exit(1)
+	}
+	if *key != "" {
+		config.KeyPath = *key
+	}
+
+	fmt.Printf("Connecting to %s@%s:%d...\n", config.User, config.Host, config.Port)
+
+	session, err := cluster.Connect(*config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "SSH connection failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("SSH connected. Deploying agent...")
+	if err := session.SCPBinary("~/.gpusched/gpusched"); err != nil {
+		fmt.Fprintf(os.Stderr, "SCP failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	agentPort := 9712
+	if err := session.StartRemoteAgent(agentPort); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start remote agent: %v\n", err)
+		os.Exit(1)
+	}
+
+	localPort, err := session.ForwardPort(agentPort)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Port forward failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	client := cluster.NewAgentClient(fmt.Sprintf("http://localhost:%d", localPort))
+	nodeID := fmt.Sprintf("ssh-%s-%d", config.Host, config.Port)
+	node, err := ClusterMgr.AddRemoteNode(nodeID, config.Host, client)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error adding node: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Connected to %s: %d GPUs\n", node.Name, len(node.Devices))
+}
+
+func cmdNodes() {
+	if ClusterMgr == nil {
+		fmt.Println("No cluster initialized. Use 'connect' first.")
+		return
+	}
+
+	nodes := ClusterMgr.AllNodes()
+	if len(nodes) == 0 {
+		fmt.Println("No nodes connected")
+		return
+	}
+
+	fmt.Printf("Nodes (%d):\n", len(nodes))
+	for _, n := range nodes {
+		fmt.Printf("  %-20s  %-12s  %d GPUs  %s\n", n.Name, n.ID, len(n.Devices), n.Status.String())
+	}
+}
+
+func cmdLogs(args []string) {
+	fs := flag.NewFlagSet("logs", flag.ExitOnError)
+	follow := fs.Bool("follow", false, "follow log output")
+	fs.Parse(args)
+
+	remaining := fs.Args()
+	if len(remaining) == 0 {
+		fmt.Fprintf(os.Stderr, "usage: gpusched logs <jobID> [--follow]\n")
+		os.Exit(1)
+	}
+
+	jobID := remaining[0]
+
+	if ClusterMgr == nil {
+		fmt.Fprintf(os.Stderr, "error: no cluster initialized\n")
+		os.Exit(1)
+	}
+
+	// Find which node has this job
+	var nodeID string
+	if ClusterSched != nil {
+		for id, cj := range ClusterSched.RunningJobs() {
+			if id == jobID {
+				nodeID = cj.NodeID
+				break
+			}
+		}
+	}
+
+	// If not found in running, try all nodes
+	if nodeID == "" {
+		for _, n := range ClusterMgr.AllNodes() {
+			client, ok := ClusterMgr.GetClient(n.ID)
+			if !ok {
+				continue
+			}
+			chunk, err := client.GetLogs(jobID, 0)
+			if err == nil {
+				nodeID = n.ID
+				fmt.Print(chunk.Data)
+				if !*follow || chunk.EOF {
+					return
+				}
+				// Continue following from this offset
+				followLogs(n.ID, jobID, chunk.Offset)
+				return
+			}
+		}
+		fmt.Fprintf(os.Stderr, "error: job %s not found on any node\n", jobID)
+		os.Exit(1)
+	}
+
+	client, ok := ClusterMgr.GetClient(nodeID)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "error: node %s not connected\n", nodeID)
+		os.Exit(1)
+	}
+
+	chunk, err := client.GetLogs(jobID, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Print(chunk.Data)
+	if *follow && !chunk.EOF {
+		followLogs(nodeID, jobID, chunk.Offset)
+	}
+}
+
+func followLogs(nodeID, jobID string, offset int64) {
+	client, ok := ClusterMgr.GetClient(nodeID)
+	if !ok {
+		return
+	}
+
+	for {
+		time.Sleep(500 * time.Millisecond)
+		chunk, err := client.GetLogs(jobID, offset)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\nerror reading logs: %v\n", err)
+			return
+		}
+		if len(chunk.Data) > 0 {
+			fmt.Print(chunk.Data)
+			offset = chunk.Offset
+		}
+		if chunk.EOF {
+			return
+		}
+	}
 }
 
 func parseVRAM(s string) uint64 {
