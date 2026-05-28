@@ -1,8 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
-	import { SubmitJob, GetDevices } from '../lib/api.js';
+	import { SubmitJob, ClusterSubmitJob, GetDevices } from '../lib/api.js';
 	import { getCommandPath } from '../lib/preferences.js';
 
+	let { remoteMode = false } = $props();
 	let command = $state('');
 	let numGPUs = $state(1);
 	let minVRAM = $state(0);
@@ -34,7 +35,8 @@
 		let minVRAMMB = vramUnit === 'GB' ? minVRAM * 1024 : minVRAM;
 
 		try {
-			const jobID = await SubmitJob({
+			const submitFn = remoteMode ? ClusterSubmitJob : SubmitJob;
+			const jobID = await submitFn({
 				command: String(command),
 				pathVariable: String(commandPath),
 				numGPUs: Number(numGPUs),
@@ -63,7 +65,7 @@
 			<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">Submit a command to run on allocated GPUs</p>
 		</div>
 
-		<form onsubmit={handleSubmit} class="rounded-lg p-5 space-y-5 sm:p-6" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+		<form onsubmit={handleSubmit} autocomplete="off" class="rounded-lg p-5 space-y-5 sm:p-6" style="background: var(--bg-secondary); border: 1px solid var(--border);">
 			<div>
 				<label for="command" class="block text-[11px] font-medium uppercase tracking-wider mb-1.5" style="color: var(--text-tertiary);">
 					Command
@@ -74,10 +76,11 @@
 					bind:value={command}
 					placeholder="python3 script.py"
 					required
+					autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other"
 					class="w-full rounded-md px-3 py-2.5 text-[13px] font-[JetBrains_Mono,monospace] focus:outline-none focus:ring-1"
 					style="background: var(--input-bg); border: 1px solid var(--border); color: var(--text-primary);"
 				/>
-				{#if commandPath}
+				{#if commandPath && !remoteMode}
 					<div class="mt-2 flex flex-wrap items-center gap-2">
 						<button
 							type="button"

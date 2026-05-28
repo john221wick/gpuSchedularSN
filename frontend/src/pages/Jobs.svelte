@@ -1,7 +1,13 @@
 <script>
-	import { onMount } from 'svelte';
-	import { GetRunningJobs, GetCompletedJobs, GetQueuedJobs, GetQueueLength, KillJob, RemoveQueuedJob, UpdateQueuedPriority } from '../lib/api.js';
+	import { onMount, tick } from 'svelte';
+	import {
+		GetRunningJobs, GetCompletedJobs, GetQueuedJobs, GetQueueLength,
+		KillJob, RemoveQueuedJob, UpdateQueuedPriority,
+		GetClusterRunningJobs, GetClusterCompletedJobs, GetClusterQueuedJobs, ClusterKillJob,
+		GetJobLogs
+	} from '../lib/api.js';
 
+	let { remoteMode = false } = $props();
 	let jobs = $state([]);
 	let completed = $state([]);
 	let queued = $state([]);
@@ -13,15 +19,28 @@
 	let pendingKillJob = $state(null);
 	let killingJobId = $state(null);
 	let killError = $state('');
+	let expandedLogs = $state(null);
+	let logContent = $state('');
+	let logOffset = $state(0);
+	let logEOF = $state(false);
+	let logError = $state('');
+	let logInterval = null;
 	let interval;
 
 	async function refresh() {
 		try {
-			jobs = await GetRunningJobs();
-			completed = await GetCompletedJobs();
-			queueLen = await GetQueueLength();
-			if (showQueue) {
-				queued = await GetQueuedJobs();
+			if (remoteMode) {
+				jobs = await GetClusterRunningJobs() || [];
+				completed = await GetClusterCompletedJobs() || [];
+				queued = showQueue ? (await GetClusterQueuedJobs() || []) : queued;
+				queueLen = queued.length;
+			} else {
+				jobs = await GetRunningJobs();
+				completed = await GetCompletedJobs();
+				queueLen = await GetQueueLength();
+				if (showQueue) {
+					queued = await GetQueuedJobs();
+				}
 			}
 		} catch (e) {
 			console.error('Jobs refresh failed:', e);
@@ -47,7 +66,11 @@
 		killError = '';
 
 		try {
-			await KillJob(jobId);
+			if (remoteMode) {
+				await ClusterKillJob(jobId);
+			} else {
+				await KillJob(jobId);
+			}
 			pendingKillJob = null;
 			await refresh();
 		} catch (e) {
@@ -91,6 +114,54 @@
 		if (e.key === 'Escape') editingPriority = null;
 	}
 
+	async function toggleLogs(jobId) {
+		if (expandedLogs === jobId) {
+			expandedLogs = null;
+			logContent = '';
+			logOffset = 0;
+			logEOF = false;
+			logError = '';
+			if (logInterval) { clearInterval(logInterval); logInterval = null; }
+			return;
+		}
+		expandedLogs = jobId;
+		logContent = '';
+		logOffset = 0;
+		logEOF = false;
+		logError = '';
+		await fetchLogs(jobId);
+		// Auto-refresh logs for running jobs
+		if (logInterval) clearInterval(logInterval);
+		logInterval = setInterval(() => {
+			if (expandedLogs === jobId && !logEOF) fetchLogs(jobId);
+		}, 2000);
+	}
+
+	async function fetchLogs(jobId) {
+		try {
+			const result = await GetJobLogs(jobId, logOffset);
+			if (result) {
+				if (result.data && result.data.length > 0) {
+					logContent += result.data;
+				}
+				if (result.offset !== undefined) {
+					logOffset = result.offset;
+				}
+				logEOF = result.eof || false;
+				if (logEOF && logInterval) {
+					clearInterval(logInterval);
+					logInterval = null;
+				}
+				await tick();
+				const el = document.getElementById('log-container');
+				if (el) el.scrollTop = el.scrollHeight;
+			}
+			logError = '';
+		} catch (e) {
+			logError = e?.message || String(e);
+		}
+	}
+
 	async function toggleQueue() {
 		showQueue = !showQueue;
 		if (showQueue) {
@@ -101,7 +172,10 @@
 	onMount(() => {
 		refresh();
 		interval = setInterval(refresh, 2000);
-		return () => clearInterval(interval);
+		return () => {
+			clearInterval(interval);
+			if (logInterval) clearInterval(logInterval);
+		};
 	});
 
 	function timeAgo(isoStr) {
@@ -158,6 +232,9 @@
 						<tr style="border-bottom: 1px solid var(--border);">
 							<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Job ID</th>
 							<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Command</th>
+							{#if remoteMode}
+								<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Node</th>
+							{/if}
 							<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">GPUs</th>
 							<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Started</th>
 							<th class="text-right px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Actions</th>
@@ -170,6 +247,9 @@
 								onmouseleave={(e) => e.currentTarget.style.background = 'none'}>
 								<td class="px-4 py-2.5 text-[11px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{job.id.slice(0, 16)}…</td>
 								<td class="px-4 py-2.5 text-[13px] font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{job.command}</td>
+								{#if remoteMode}
+									<td class="px-4 py-2.5 text-[12px]" style="color: var(--text-secondary);">{job.nodeName || job.nodeID || '—'}</td>
+								{/if}
 								<td class="px-4 py-2.5">
 									<div class="flex gap-1">
 										{#each job.gpuIDs || [] as gpuId (gpuId)}
@@ -179,14 +259,48 @@
 								</td>
 								<td class="px-4 py-2.5 text-[12px]" style="color: var(--text-tertiary);">{timeAgo(job.startedAt)}</td>
 								<td class="px-4 py-2.5 text-right">
-									<button
-										onclick={() => handleKill(job)}
-										class="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors font-medium cursor-pointer"
-									>
-										Kill
-									</button>
+									<div class="flex items-center justify-end gap-1.5">
+										{#if remoteMode}
+											<button
+												onclick={() => toggleLogs(job.id)}
+												class="text-[11px] px-2 py-1 rounded transition-colors font-medium cursor-pointer"
+												style="background: {expandedLogs === job.id ? 'var(--accent)' : 'var(--bg-tertiary)'}; color: {expandedLogs === job.id ? 'var(--accent-text)' : 'var(--text-secondary)'};"
+											>
+												Logs
+											</button>
+										{/if}
+										<button
+											onclick={() => handleKill(job)}
+											class="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors font-medium cursor-pointer"
+										>
+											Kill
+										</button>
+									</div>
 								</td>
 							</tr>
+							{#if expandedLogs === job.id}
+								<tr>
+									<td colspan={remoteMode ? 6 : 5} class="px-4 py-3" style="background: var(--bg-primary);">
+										{#if logError}
+											<div class="rounded-md px-3 py-2 text-[12px] mb-2" style="background: rgba(239,68,68,0.1); color: rgb(239,68,68);">
+												{logError}
+											</div>
+										{/if}
+										<div
+											id="log-container"
+											class="rounded-md p-3 text-[11px] font-[JetBrains_Mono,monospace] leading-relaxed overflow-auto max-h-[300px] whitespace-pre-wrap"
+											style="background: #0d0d0d; color: #d4d4d4; border: 1px solid var(--border);"
+										>
+											{logContent || (logError ? '' : 'Loading logs...')}
+										</div>
+										{#if !logEOF}
+											<p class="text-[10px] mt-1.5" style="color: var(--text-muted);">Streaming… auto-refreshes every 2s</p>
+										{:else}
+											<p class="text-[10px] mt-1.5" style="color: var(--text-muted);">End of logs</p>
+										{/if}
+									</td>
+								</tr>
+							{/if}
 						{/each}
 					</tbody>
 				</table>
@@ -213,6 +327,7 @@
 								<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Status</th>
 								<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">GPUs</th>
 								<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Started</th>
+								<th class="text-right px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Actions</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -236,7 +351,35 @@
 										</div>
 									</td>
 									<td class="px-4 py-2.5 text-[12px]" style="color: var(--text-tertiary);">{timeAgo(job.startedAt)}</td>
+									<td class="px-4 py-2.5 text-right">
+										<button
+											onclick={() => toggleLogs(job.id)}
+											class="text-[11px] px-2 py-1 rounded transition-colors font-medium cursor-pointer"
+											style="background: {expandedLogs === job.id ? 'var(--accent)' : 'var(--bg-tertiary)'}; color: {expandedLogs === job.id ? 'var(--accent-text)' : 'var(--text-secondary)'};"
+										>
+											Logs
+										</button>
+									</td>
 								</tr>
+								{#if expandedLogs === job.id}
+									<tr>
+										<td colspan="6" class="px-4 py-3" style="background: var(--bg-primary);">
+											{#if logError}
+												<div class="rounded-md px-3 py-2 text-[12px] mb-2" style="background: rgba(239,68,68,0.1); color: rgb(239,68,68);">
+													{logError}
+												</div>
+											{/if}
+											<div
+												id="log-container"
+												class="rounded-md p-3 text-[11px] font-[JetBrains_Mono,monospace] leading-relaxed overflow-auto max-h-[300px] whitespace-pre-wrap"
+												style="background: #0d0d0d; color: #d4d4d4; border: 1px solid var(--border);"
+											>
+												{logContent || (logError ? '' : 'Loading logs...')}
+											</div>
+											<p class="text-[10px] mt-1.5" style="color: var(--text-muted);">End of logs</p>
+										</td>
+									</tr>
+								{/if}
 							{/each}
 						</tbody>
 					</table>

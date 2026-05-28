@@ -27,13 +27,19 @@ func (s NodeStatus) String() string {
 }
 
 type Node struct {
-	ID       string
-	Name     string
-	AgentURL string
-	Status   NodeStatus
-	Devices  []agent.GPUDevice
-	Links    []agent.GPULink
-	Topology *scheduler.Topology
+	ID        string
+	Name      string
+	AgentURL  string
+	Status    NodeStatus
+	LocalDir  string // local source directory to rsync FROM (e.g. /Users/me/myproject)
+	RemoteDir string // remote destination directory to rsync TO (e.g. /root/myproject)
+	GPUVendor string // nvidia, amd, intel, none
+	GPUName   string // e.g. "NVIDIA A100-SXM4-80GB"
+	Arch      string // x86_64, aarch64
+	OS        string // e.g. "Ubuntu 22.04"
+	Devices   []agent.GPUDevice
+	Links     []agent.GPULink
+	Topology  *scheduler.Topology
 }
 
 type ClusterJob struct {

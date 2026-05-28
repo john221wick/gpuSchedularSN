@@ -17,7 +17,31 @@ import {
 	KillJob,
 	RemoveQueuedJob,
 	UpdateQueuedPriority,
-	GetDashboard
+	GetDashboard,
+	// Cluster/remote mode
+	SetRemoteMode,
+	GetRemoteMode,
+	ConnectNode,
+	DisconnectNode,
+	GetNodes,
+	GetSavedNodes,
+	ReconnectNode,
+	RemoveNode,
+	SetNodePaths,
+	SyncFilesToNode,
+	GetJobLogs,
+	RunTerminalCommand,
+	GetClusterDevices,
+	GetClusterTopology,
+	GetClusterRunningJobs,
+	GetClusterCompletedJobs,
+	GetClusterQueuedJobs,
+	ClusterSubmitJob,
+	ClusterKillJob,
+	GetClusterDashboard,
+	// App logs
+	GetAppLogs,
+	GetAppLogCount
 } from '../../wailsjs/go/desktop/App.js';
 
 export {
@@ -32,5 +56,29 @@ export {
 	KillJob,
 	RemoveQueuedJob,
 	UpdateQueuedPriority,
-	GetDashboard
+	GetDashboard,
+	// Cluster/remote mode
+	SetRemoteMode,
+	GetRemoteMode,
+	ConnectNode,
+	DisconnectNode,
+	GetNodes,
+	GetSavedNodes,
+	ReconnectNode,
+	RemoveNode,
+	SetNodePaths,
+	SyncFilesToNode,
+	GetJobLogs,
+	RunTerminalCommand,
+	GetClusterDevices,
+	GetClusterTopology,
+	GetClusterRunningJobs,
+	GetClusterCompletedJobs,
+	GetClusterQueuedJobs,
+	ClusterSubmitJob,
+	ClusterKillJob,
+	GetClusterDashboard,
+	// App logs
+	GetAppLogs,
+	GetAppLogCount
 };

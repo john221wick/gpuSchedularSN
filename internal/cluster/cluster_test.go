@@ -21,7 +21,7 @@ func startTestAgent(t *testing.T, gpuCount int) (string, func()) {
 	os.Setenv("GPUSCHED_MOCK_GPUS", fmt.Sprintf("%d", gpuCount))
 	defer os.Unsetenv("GPUSCHED_MOCK_GPUS")
 
-	srv, err := agentserver.NewAgentServer()
+	srv, err := agentserver.NewAgentServer("")
 	if err != nil {
 		t.Fatalf("NewAgentServer: %v", err)
 	}
@@ -89,6 +89,19 @@ func TestParseSSHCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseSSHCommandAlias(t *testing.T) {
+	// Bare alias should not error — resolves via ~/.ssh/config or uses alias as hostname
+	cfg, err := ParseSSHCommand("ssh myalias")
+	if err != nil {
+		t.Fatalf("bare alias should not error: %v", err)
+	}
+	// Host should be at minimum the alias itself (if not in ssh config)
+	if cfg.Host == "" {
+		t.Error("host should not be empty")
+	}
+	t.Logf("alias resolved: host=%s user=%s port=%d key=%s", cfg.Host, cfg.User, cfg.Port, cfg.KeyPath)
 }
 
 func TestAgentClientAllEndpoints(t *testing.T) {

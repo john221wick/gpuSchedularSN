@@ -363,14 +363,20 @@ func cmdConnect(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Println("SSH connected. Deploying agent...")
-	if err := session.SCPBinary("~/.gpusched/gpusched"); err != nil {
-		fmt.Fprintf(os.Stderr, "SCP failed: %v\n", err)
+	remoteBase := "~/gpuschedular"
+	session.RunCommand(fmt.Sprintf("mkdir -p %s/logs", remoteBase))
+
+	fmt.Println("SSH connected. Ensuring rsync installed on remote...")
+	session.RunCommand("which rsync > /dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq rsync 2>/dev/null || yum install -y -q rsync 2>/dev/null || apk add rsync 2>/dev/null || true)")
+
+	fmt.Println("Cross-compiling and deploying agent...")
+	if err := session.CrossCompileAndSCP(remoteBase+"/gpusched", false); err != nil {
+		fmt.Fprintf(os.Stderr, "Deploy failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	agentPort := 9712
-	if err := session.StartRemoteAgent(agentPort); err != nil {
+	if err := session.StartRemoteAgent(agentPort, remoteBase, 0); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start remote agent: %v\n", err)
 		os.Exit(1)
 	}

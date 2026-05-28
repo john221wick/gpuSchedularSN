@@ -1,5 +1,137 @@
 export namespace desktop {
 	
+	export class AppLogEntry {
+	    time: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppLogEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.message = source["message"];
+	    }
+	}
+	export class ClusterDeviceInfo {
+	    id: number;
+	    vendor: string;
+	    name: string;
+	    vramTotalMB: number;
+	    vramUsedMB: number;
+	    utilizationPct: number;
+	    temperatureC: number;
+	    allocated: boolean;
+	    allocatedTo: string;
+	    nodeID: string;
+	    nodeName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterDeviceInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.vendor = source["vendor"];
+	        this.name = source["name"];
+	        this.vramTotalMB = source["vramTotalMB"];
+	        this.vramUsedMB = source["vramUsedMB"];
+	        this.utilizationPct = source["utilizationPct"];
+	        this.temperatureC = source["temperatureC"];
+	        this.allocated = source["allocated"];
+	        this.allocatedTo = source["allocatedTo"];
+	        this.nodeID = source["nodeID"];
+	        this.nodeName = source["nodeName"];
+	    }
+	}
+	export class LinkInfo {
+	    gpuA: number;
+	    gpuB: number;
+	    type: string;
+	    bandwidthGBps: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LinkInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.gpuA = source["gpuA"];
+	        this.gpuB = source["gpuB"];
+	        this.type = source["type"];
+	        this.bandwidthGBps = source["bandwidthGBps"];
+	    }
+	}
+	export class NodeTopologyInfo {
+	    nodeID: string;
+	    nodeName: string;
+	    numGPUs: number;
+	    bandwidth: number[][];
+	    links: LinkInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeTopologyInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodeID = source["nodeID"];
+	        this.nodeName = source["nodeName"];
+	        this.numGPUs = source["numGPUs"];
+	        this.bandwidth = source["bandwidth"];
+	        this.links = this.convertValues(source["links"], LinkInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClusterTopologyInfo {
+	    nodes: NodeTopologyInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterTopologyInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodes = this.convertValues(source["nodes"], NodeTopologyInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DashboardInfo {
 	    totalGPUs: number;
 	    freeGPUs: number;
@@ -62,6 +194,8 @@ export namespace desktop {
 	    submittedAt: string;
 	    startedAt: string;
 	    gpuIDs: number[];
+	    nodeID: string;
+	    nodeName: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new JobInfo(source);
@@ -78,24 +212,74 @@ export namespace desktop {
 	        this.submittedAt = source["submittedAt"];
 	        this.startedAt = source["startedAt"];
 	        this.gpuIDs = source["gpuIDs"];
+	        this.nodeID = source["nodeID"];
+	        this.nodeName = source["nodeName"];
 	    }
 	}
-	export class LinkInfo {
-	    gpuA: number;
-	    gpuB: number;
-	    type: string;
-	    bandwidthGBps: number;
+	
+	export class LogData {
+	    data: string;
+	    offset: number;
+	    eof: boolean;
 	
 	    static createFrom(source: any = {}) {
-	        return new LinkInfo(source);
+	        return new LogData(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.gpuA = source["gpuA"];
-	        this.gpuB = source["gpuB"];
-	        this.type = source["type"];
-	        this.bandwidthGBps = source["bandwidthGBps"];
+	        this.data = source["data"];
+	        this.offset = source["offset"];
+	        this.eof = source["eof"];
+	    }
+	}
+	export class NodeInfo {
+	    id: string;
+	    name: string;
+	    status: string;
+	    numGPUs: number;
+	    freeGPUs: number;
+	    localDir: string;
+	    remoteDir: string;
+	    gpuVendor: string;
+	    gpuName: string;
+	    arch: string;
+	    os: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.numGPUs = source["numGPUs"];
+	        this.freeGPUs = source["freeGPUs"];
+	        this.localDir = source["localDir"];
+	        this.remoteDir = source["remoteDir"];
+	        this.gpuVendor = source["gpuVendor"];
+	        this.gpuName = source["gpuName"];
+	        this.arch = source["arch"];
+	        this.os = source["os"];
+	    }
+	}
+	
+	export class SavedNodeInfo {
+	    id: string;
+	    sshCommand: string;
+	    mockMode: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SavedNodeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sshCommand = source["sshCommand"];
+	        this.mockMode = source["mockMode"];
 	    }
 	}
 	export class SubmitRequest {
@@ -116,6 +300,20 @@ export namespace desktop {
 	        this.numGPUs = source["numGPUs"];
 	        this.minVRAMMB = source["minVRAMMB"];
 	        this.priority = source["priority"];
+	    }
+	}
+	export class TerminalResult {
+	    output: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TerminalResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.output = source["output"];
+	        this.error = source["error"];
 	    }
 	}
 	export class TopologyInfo {

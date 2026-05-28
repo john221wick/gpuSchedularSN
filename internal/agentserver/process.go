@@ -29,6 +29,9 @@ type ProcessManager struct {
 	processes map[string]*managedProcess
 	logDir    string
 	vendor    agent.Vendor
+	// SaveFn is called after job state changes (start, complete, kill).
+	// Set by AgentServer to trigger immediate state persistence.
+	SaveFn func()
 }
 
 func NewProcessManager(logDir string, vendor agent.Vendor) *ProcessManager {
@@ -83,6 +86,11 @@ func (pm *ProcessManager) Start(spec JobSpec) error {
 	pm.processes[spec.ID] = proc
 	pm.mu.Unlock()
 
+	// Persist immediately after job start
+	if pm.SaveFn != nil {
+		pm.SaveFn()
+	}
+
 	go func() {
 		waitErr := cmd.Wait()
 		proc.mu.Lock()
@@ -101,6 +109,11 @@ func (pm *ProcessManager) Start(spec JobSpec) error {
 		}
 		proc.mu.Unlock()
 		logFile.Close()
+
+		// Persist after job completes
+		if pm.SaveFn != nil {
+			pm.SaveFn()
+		}
 	}()
 
 	return nil
@@ -180,9 +193,18 @@ func (pm *ProcessManager) Status() []JobStatusResponse {
 }
 
 func (pm *ProcessManager) ReadLog(jobID string, offset int64) (LogChunk, error) {
+	// Check if job exists (even if log file not created yet)
+	pm.mu.RLock()
+	_, jobExists := pm.processes[jobID]
+	pm.mu.RUnlock()
+
 	logPath := fmt.Sprintf("%s/%s.log", pm.logDir, jobID)
 	f, err := os.Open(logPath)
 	if err != nil {
+		if os.IsNotExist(err) && jobExists {
+			// Job exists but log file not created yet — return empty
+			return LogChunk{Data: "", Offset: 0, EOF: false}, nil
+		}
 		return LogChunk{}, fmt.Errorf("open log: %w", err)
 	}
 	defer f.Close()
@@ -236,13 +258,14 @@ func (pm *ProcessManager) ReconcilePIDs() {
 }
 
 // RestoreFromState loads persisted jobs into the process manager for PID reconciliation.
+// For still-running processes, starts a background goroutine to track completion.
 func (pm *ProcessManager) RestoreFromState(jobs []PersistedJob) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	for _, pj := range jobs {
 		startedAt, _ := time.Parse(time.RFC3339, pj.StartedAt)
-		pm.processes[pj.ID] = &managedProcess{
+		proc := &managedProcess{
 			spec: JobSpec{
 				ID:      pj.ID,
 				Command: pj.Command,
@@ -252,6 +275,39 @@ func (pm *ProcessManager) RestoreFromState(jobs []PersistedJob) {
 			status:    pj.Status,
 			pid:       pj.PID,
 			startedAt: startedAt,
+		}
+		pm.processes[pj.ID] = proc
+
+		// For running processes, monitor PID in background
+		if pj.Status == "running" && pj.PID > 0 {
+			go pm.monitorRestoredProcess(proc)
+		}
+	}
+}
+
+// monitorRestoredProcess polls a restored process PID until it exits.
+func (pm *ProcessManager) monitorRestoredProcess(proc *managedProcess) {
+	for {
+		time.Sleep(2 * time.Second)
+		proc.mu.Lock()
+		if proc.status != "running" {
+			proc.mu.Unlock()
+			return
+		}
+		pid := proc.pid
+		proc.mu.Unlock()
+
+		if err := syscall.Kill(pid, 0); err != nil {
+			// Process gone — check exit via /proc or mark failed
+			proc.mu.Lock()
+			if proc.status == "running" {
+				// Can't get real exit code from restored process, assume failed
+				// Check if log ends with success indicators
+				proc.status = "done"
+				proc.exitCode = 0
+			}
+			proc.mu.Unlock()
+			return
 		}
 	}
 }

@@ -166,24 +166,32 @@ func (cs *ClusterScheduler) tick() {
 	// Pop job from queue
 	job = cs.queue.PopJob()
 
+	// Resolve paths from node config
+	var localDir, remoteDir string
+	if node, ok := cs.manager.GetNode(best.nodeID); ok {
+		localDir = node.LocalDir
+		remoteDir = node.RemoteDir
+	}
+
 	cj := &ClusterJob{
-		Job:    *job,
-		NodeID: best.nodeID,
+		Job:     *job,
+		NodeID:  best.nodeID,
+		WorkDir: remoteDir,
 	}
 	cj.Status = scheduler.Running
 	cj.StartedAt = time.Now()
 	cj.GPUIDs = best.gpuIDs
 
-	// File transfer if needed
-	if cs.TransferFn != nil && cj.WorkDir != "" && best.nodeID != "local" {
-		remoteDir, err := cs.TransferFn(cj.WorkDir, best.nodeID, cj)
+	// File transfer: rsync node.LocalDir → node.RemoteDir on remote
+	if cs.TransferFn != nil && localDir != "" && remoteDir != "" && best.nodeID != "local" {
+		resultDir, err := cs.TransferFn(localDir, best.nodeID, cj)
 		if err != nil {
 			fmt.Printf("Job %s: file transfer failed: %v\n", job.ID, err)
 			cj.Status = scheduler.Failed
 			cs.completed = append(cs.completed, cj)
 			return
 		}
-		cj.WorkDir = remoteDir
+		cj.WorkDir = resultDir
 	}
 
 	// Dispatch to agent
@@ -394,6 +402,59 @@ func (cs *ClusterScheduler) QueueLen() int {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.queue.Len()
+}
+
+// RecoverRemoteJobs restores jobs from a remote agent into the scheduler.
+// Called on reconnect to pick up jobs that survived SSH disconnect.
+func (cs *ClusterScheduler) RecoverRemoteJobs(nodeID string, remoteJobs []agentserver.JobStatusResponse) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	for _, rj := range remoteJobs {
+		// Skip if already tracked
+		if _, exists := cs.running[rj.ID]; exists {
+			continue
+		}
+		// Check completed too
+		alreadyCompleted := false
+		for _, cj := range cs.completed {
+			if cj.ID == rj.ID {
+				alreadyCompleted = true
+				break
+			}
+		}
+		if alreadyCompleted {
+			continue
+		}
+
+		startedAt, _ := time.Parse(time.RFC3339, rj.StartedAt)
+		cj := &ClusterJob{
+			Job: scheduler.Job{
+				ID:        rj.ID,
+				Command:   rj.Command,
+				GPUIDs:    rj.GPUIDs,
+				NumGPUs:   len(rj.GPUIDs),
+				Status:    scheduler.Running,
+				StartedAt: startedAt,
+			},
+			NodeID: nodeID,
+		}
+
+		switch rj.Status {
+		case "running":
+			cs.running[rj.ID] = cj
+			cs.allocateGPUs(nodeID, rj.GPUIDs, rj.ID)
+			fmt.Printf("Recovered running job %s from node %s\n", rj.ID, nodeID)
+		case "done":
+			cj.Status = scheduler.Done
+			cs.completed = append(cs.completed, cj)
+			fmt.Printf("Recovered completed job %s from node %s\n", rj.ID, nodeID)
+		case "failed":
+			cj.Status = scheduler.Failed
+			cs.completed = append(cs.completed, cj)
+			fmt.Printf("Recovered failed job %s from node %s\n", rj.ID, nodeID)
+		}
+	}
 }
 
 func (cs *ClusterScheduler) Stop() {

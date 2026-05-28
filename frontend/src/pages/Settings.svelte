@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { clearCommandPath, getCommandPath, saveCommandPath } from '../lib/preferences.js';
 
-	let { dark, toggleTheme } = $props();
+	let { dark, toggleTheme, remoteMode = false } = $props();
 
 	let commandPath = $state('');
 	let saved = $state(false);
@@ -51,6 +51,7 @@
 		</div>
 	</section>
 
+	{#if !remoteMode}
 	<section class="rounded-lg p-5 space-y-4" style="background: var(--bg-secondary); border: 1px solid var(--border);">
 		<div>
 			<h2 class="text-[13px] font-semibold" style="color: var(--text-primary);">Path Variable</h2>
@@ -66,6 +67,7 @@
 				type="text"
 				bind:value={commandPath}
 				placeholder="/path/to/folder"
+				autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other"
 				class="w-full rounded-md px-3 py-2.5 text-[13px] font-[JetBrains_Mono,monospace] focus:outline-none focus:ring-1"
 				style="background: var(--input-bg); border: 1px solid var(--border); color: var(--text-primary);"
 			/>
@@ -93,4 +95,5 @@
 			{/if}
 		</div>
 	</section>
+	{/if}
 </div>

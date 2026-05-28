@@ -45,6 +45,19 @@ func (nm *NodeManager) addNode(id, name string, client AgentClient) (*Node, erro
 
 	topology := scheduler.BuildTopology(topo.Devices, topo.Links)
 
+	nm.mu.Lock()
+	// Check if node already exists (reconnect case) — preserve config
+	if existing, ok := nm.nodes[id]; ok {
+		existing.Status = NodeConnected
+		existing.Devices = topo.Devices
+		existing.Links = topo.Links
+		existing.Topology = topology
+		nm.clients[id] = client
+		nm.mu.Unlock()
+		fmt.Printf("Node reconnected: %s (%s) — %d GPUs\n", name, id, len(topo.Devices))
+		return existing, nil
+	}
+
 	node := &Node{
 		ID:       id,
 		Name:     name,
@@ -55,7 +68,6 @@ func (nm *NodeManager) addNode(id, name string, client AgentClient) (*Node, erro
 		Topology: topology,
 	}
 
-	nm.mu.Lock()
 	nm.nodes[id] = node
 	nm.clients[id] = client
 	nm.mu.Unlock()
@@ -82,6 +94,18 @@ func (nm *NodeManager) GetNode(nodeID string) (*Node, bool) {
 	defer nm.mu.RUnlock()
 	node, ok := nm.nodes[nodeID]
 	return node, ok
+}
+
+func (nm *NodeManager) SetNodePaths(nodeID, localDir, remoteDir string) error {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+	node, ok := nm.nodes[nodeID]
+	if !ok {
+		return fmt.Errorf("node %s not found", nodeID)
+	}
+	node.LocalDir = localDir
+	node.RemoteDir = remoteDir
+	return nil
 }
 
 func (nm *NodeManager) GetClient(nodeID string) (AgentClient, bool) {

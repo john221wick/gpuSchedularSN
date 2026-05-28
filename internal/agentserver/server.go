@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/john221wick/gpuSchedularSN/internal/agent"
 )
@@ -16,9 +17,12 @@ type AgentServer struct {
 	pm         *ProcessManager
 	listener   net.Listener
 	dataDir    string
+	stopSave   chan struct{}
 }
 
-func NewAgentServer() (*AgentServer, error) {
+// NewAgentServer creates a new agent server.
+// If dir is empty, defaults to ~/gpuschedular.
+func NewAgentServer(dir string) (*AgentServer, error) {
 	count, err := agent.Init()
 	if err != nil {
 		return nil, fmt.Errorf("agent init: %w", err)
@@ -33,17 +37,28 @@ func NewAgentServer() (*AgentServer, error) {
 	}
 
 	// Set up directories
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get home dir: %w", err)
+	dataDir := dir
+	if dataDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("get home dir: %w", err)
+		}
+		dataDir = filepath.Join(home, "gpuschedular")
 	}
-	dataDir := filepath.Join(home, ".gpusched")
 	logDir := filepath.Join(dataDir, "logs")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("create dirs: %w", err)
 	}
 
 	pm := NewProcessManager(logDir, vendor)
+
+	// Wire immediate state save on job events
+	pm.SaveFn = func() {
+		state := pm.ToPersistedState()
+		if err := SaveState(dataDir, state); err != nil {
+			fmt.Printf("Warning: save state failed: %v\n", err)
+		}
+	}
 
 	// Restore persisted state and reconcile PIDs
 	persisted, err := LoadState(dataDir)
@@ -74,7 +89,11 @@ func NewAgentServer() (*AgentServer, error) {
 		httpServer: &http.Server{Handler: mux},
 		pm:         pm,
 		dataDir:    dataDir,
+		stopSave:   make(chan struct{}),
 	}
+
+	// Periodically save state (survives crashes)
+	go srv.periodicSave()
 
 	return srv, nil
 }
@@ -107,7 +126,25 @@ func (s *AgentServer) Handler() http.Handler {
 	return s.httpServer.Handler
 }
 
+func (s *AgentServer) periodicSave() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stopSave:
+			return
+		case <-ticker.C:
+			state := s.pm.ToPersistedState()
+			if err := SaveState(s.dataDir, state); err != nil {
+				fmt.Printf("Warning: periodic state save failed: %v\n", err)
+			}
+		}
+	}
+}
+
 func (s *AgentServer) Shutdown(ctx context.Context) error {
+	close(s.stopSave)
+
 	// Save state before shutting down
 	state := s.pm.ToPersistedState()
 	if err := SaveState(s.dataDir, state); err != nil {

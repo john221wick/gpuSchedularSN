@@ -1,4 +1,4 @@
-//go:build !mock
+//go:build !mock && !smi
 
 package agent
 

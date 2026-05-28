@@ -1,15 +1,32 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetDashboard } from '../lib/api.js';
+	import { GetDashboard, GetClusterDashboard, SetRemoteMode } from '../lib/api.js';
 
+	let { remoteMode = false, onModeChange = () => {} } = $props();
 	let dashboard = $state(null);
+	let switching = $state(false);
 	let interval;
 
 	async function refresh() {
 		try {
-			dashboard = await GetDashboard();
+			dashboard = remoteMode ? await GetClusterDashboard() : await GetDashboard();
 		} catch (e) {
 			console.error('Dashboard refresh failed:', e);
+		}
+	}
+
+	async function toggleMode() {
+		switching = true;
+		try {
+			const newMode = !remoteMode;
+			await SetRemoteMode(newMode);
+			onModeChange(newMode);
+			dashboard = null;
+			await refresh();
+		} catch (e) {
+			console.error('Mode switch failed:', e);
+		} finally {
+			switching = false;
 		}
 	}
 
@@ -26,9 +43,31 @@
 </script>
 
 <div class="p-8 space-y-6 max-w-[1000px]">
-	<div>
-		<h1 class="text-lg font-semibold" style="color: var(--text-primary);">Dashboard</h1>
-		<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">System overview</p>
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-lg font-semibold" style="color: var(--text-primary);">Dashboard</h1>
+			<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">
+				{remoteMode ? 'Cluster overview' : 'System overview'}
+			</p>
+		</div>
+		<div class="flex items-center gap-1 rounded-lg p-0.5" style="background: var(--bg-tertiary);">
+			<button
+				onclick={toggleMode}
+				disabled={switching}
+				class="px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer"
+				style="background: {!remoteMode ? 'var(--accent)' : 'transparent'}; color: {!remoteMode ? 'var(--accent-text)' : 'var(--text-tertiary)'};"
+			>
+				Inplace
+			</button>
+			<button
+				onclick={toggleMode}
+				disabled={switching}
+				class="px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer"
+				style="background: {remoteMode ? 'var(--accent)' : 'transparent'}; color: {remoteMode ? 'var(--accent-text)' : 'var(--text-tertiary)'};"
+			>
+				Remote
+			</button>
+		</div>
 	</div>
 
 	{#if dashboard}

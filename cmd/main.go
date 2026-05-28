@@ -17,8 +17,9 @@ import (
 func main() {
 	agentMode := false
 	port := 9712
+	dataDir := "" // empty = use default ~/gpuschedular
 
-	// Parse --agent and --port before passing rest to cli.Run
+	// Parse --agent, --port, --dir before passing rest to cli.Run
 	var cliArgs []string
 	for i := 1; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -31,13 +32,18 @@ func main() {
 				}
 				i++
 			}
+		case "--dir":
+			if i+1 < len(os.Args) {
+				dataDir = os.Args[i+1]
+				i++
+			}
 		default:
 			cliArgs = append(cliArgs, os.Args[i])
 		}
 	}
 
 	if agentMode {
-		runAgent(port)
+		runAgent(port, dataDir)
 		return
 	}
 
@@ -58,8 +64,8 @@ func main() {
 	cli.Run(cliArgs)
 }
 
-func runAgent(port int) {
-	srv, err := agentserver.NewAgentServer()
+func runAgent(port int, dataDir string) {
+	srv, err := agentserver.NewAgentServer(dataDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start agent: %v\n", err)
 		os.Exit(1)

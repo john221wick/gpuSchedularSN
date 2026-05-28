@@ -1,13 +1,14 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetDevices } from '../lib/api.js';
+	import { GetDevices, GetClusterDevices } from '../lib/api.js';
 
+	let { remoteMode = false } = $props();
 	let devices = $state([]);
 	let interval;
 
 	async function refresh() {
 		try {
-			devices = await GetDevices();
+			devices = remoteMode ? (await GetClusterDevices() || []) : await GetDevices();
 		} catch (e) {
 			console.error('Devices refresh failed:', e);
 		}
@@ -28,15 +29,17 @@
 <div class="p-8 space-y-4 max-w-[1000px]">
 	<div>
 		<h1 class="text-lg font-semibold" style="color: var(--text-primary);">GPUs</h1>
-		<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">{devices.length} device{devices.length !== 1 ? 's' : ''}</p>
+		<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">{devices.length} device{devices.length !== 1 ? 's' : ''}{remoteMode ? ' across cluster' : ''}</p>
 	</div>
 
-	<!-- Table layout -->
 	<div class="rounded-lg overflow-hidden" style="background: var(--bg-secondary); border: 1px solid var(--border);">
 		<table class="w-full">
 			<thead>
 				<tr style="border-bottom: 1px solid var(--border);">
 					<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">GPU</th>
+					{#if remoteMode}
+						<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Node</th>
+					{/if}
 					<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Status</th>
 					<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">VRAM</th>
 					<th class="text-left px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Util</th>
@@ -55,6 +58,9 @@
 								<span class="text-[11px] font-[JetBrains_Mono,monospace]" style="color: var(--text-muted);">:{gpu.id}</span>
 							</div>
 						</td>
+						{#if remoteMode}
+							<td class="px-4 py-3 text-[12px]" style="color: var(--text-secondary);">{gpu.nodeName || gpu.nodeID || '—'}</td>
+						{/if}
 						<td class="px-4 py-3">
 							<span class="text-[11px] px-2 py-0.5 rounded font-medium"
 								style="background: var(--bg-tertiary); color: {gpu.allocated ? 'var(--text-tertiary)' : 'var(--text-primary)'};">
