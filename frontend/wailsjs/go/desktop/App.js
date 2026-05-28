@@ -114,6 +114,10 @@ export function RemoveQueuedJob(arg1) {
   return window['go']['desktop']['App']['RemoveQueuedJob'](arg1);
 }
 
+export function ResizeTerminal(arg1, arg2, arg3) {
+  return window['go']['desktop']['App']['ResizeTerminal'](arg1, arg2, arg3);
+}
+
 export function RunTerminalCommand(arg1, arg2) {
   return window['go']['desktop']['App']['RunTerminalCommand'](arg1, arg2);
 }
@@ -126,6 +130,14 @@ export function SetRemoteMode(arg1) {
   return window['go']['desktop']['App']['SetRemoteMode'](arg1);
 }
 
+export function StartTerminalSession(arg1, arg2, arg3) {
+  return window['go']['desktop']['App']['StartTerminalSession'](arg1, arg2, arg3);
+}
+
+export function StopTerminalSession(arg1) {
+  return window['go']['desktop']['App']['StopTerminalSession'](arg1);
+}
+
 export function SubmitJob(arg1) {
   return window['go']['desktop']['App']['SubmitJob'](arg1);
 }
@@ -136,4 +148,8 @@ export function SyncFilesToNode(arg1, arg2) {
 
 export function UpdateQueuedPriority(arg1, arg2) {
   return window['go']['desktop']['App']['UpdateQueuedPriority'](arg1, arg2);
+}
+
+export function WriteTerminalInput(arg1, arg2) {
+  return window['go']['desktop']['App']['WriteTerminalInput'](arg1, arg2);
 }

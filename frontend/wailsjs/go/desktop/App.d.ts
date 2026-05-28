@@ -58,14 +58,22 @@ export function RemoveNode(arg1:string):Promise<void>;
 
 export function RemoveQueuedJob(arg1:string):Promise<void>;
 
+export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+
 export function RunTerminalCommand(arg1:string,arg2:string):Promise<desktop.TerminalResult>;
 
 export function SetNodePaths(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SetRemoteMode(arg1:boolean):Promise<void>;
 
+export function StartTerminalSession(arg1:string,arg2:number,arg3:number):Promise<string>;
+
+export function StopTerminalSession(arg1:string):Promise<void>;
+
 export function SubmitJob(arg1:desktop.SubmitRequest):Promise<string>;
 
 export function SyncFilesToNode(arg1:string,arg2:string):Promise<string>;
 
 export function UpdateQueuedPriority(arg1:string,arg2:number):Promise<void>;
+
+export function WriteTerminalInput(arg1:string,arg2:string):Promise<void>;

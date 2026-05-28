@@ -13,22 +13,8 @@
 </script>
 
 <div class="flex h-full">
-	<!-- Docs sidebar -->
-	<div class="w-[180px] shrink-0 p-4 overflow-y-auto" style="border-right: 1px solid var(--border);">
-		<div class="text-[10px] font-semibold uppercase tracking-widest px-2 pb-2" style="color: var(--text-muted);">Docs</div>
-		{#each sections as s (s.id)}
-			<button
-				onclick={() => activeSection = s.id}
-				class="block w-full text-left px-2 py-1.5 rounded text-[12px] font-medium cursor-pointer transition-colors"
-				style="color: {activeSection === s.id ? 'var(--text-primary)' : 'var(--text-tertiary)'}; background: {activeSection === s.id ? 'var(--hover-bg)' : 'transparent'};"
-			>
-				{s.label}
-			</button>
-		{/each}
-	</div>
-
 	<!-- Content -->
-	<div class="flex-1 overflow-y-auto p-8 max-w-[720px]">
+	<div class="flex-1 overflow-y-auto p-8">
 
 		{#if activeSection === 'getting-started'}
 			<h1 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Getting Started</h1>
@@ -169,5 +155,19 @@
 				</div>
 			</div>
 		{/if}
+	</div>
+
+	<!-- Docs nav (right side) -->
+	<div class="w-[160px] shrink-0 p-4 overflow-y-auto" style="border-left: 1px solid var(--border);">
+		<div class="text-[10px] font-semibold uppercase tracking-widest px-2 pb-2" style="color: var(--text-muted);">On this page</div>
+		{#each sections as s (s.id)}
+			<button
+				onclick={() => activeSection = s.id}
+				class="block w-full text-left px-2 py-1.5 rounded text-[12px] font-medium cursor-pointer transition-colors"
+				style="color: {activeSection === s.id ? 'var(--text-primary)' : 'var(--text-tertiary)'}; background: {activeSection === s.id ? 'var(--hover-bg)' : 'transparent'};"
+			>
+				{s.label}
+			</button>
+		{/each}
 	</div>
 </div>

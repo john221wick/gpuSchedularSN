@@ -1,16 +1,23 @@
 <script>
-	import { onMount, tick } from 'svelte';
-	import { GetNodes, RunTerminalCommand } from '../lib/api.js';
+	import { onMount, onDestroy } from 'svelte';
+	import { Terminal } from '@xterm/xterm';
+	import { FitAddon } from '@xterm/addon-fit';
+	import '@xterm/xterm/css/xterm.css';
+	import { GetNodes, StartTerminalSession, WriteTerminalInput, ResizeTerminal, StopTerminalSession } from '../lib/api.js';
+	import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime.js';
 
 	let nodes = $state([]);
 	let selectedNode = $state('');
-	let command = $state('');
-	let history = $state([]);
-	let running = $state(false);
-	let inputEl;
-	let cmdHistory = $state([]);
-	let cmdHistoryIdx = $state(-1);
-	let cwd = $state('~');
+	let sessionID = $state('');
+	let connected = $state(false);
+	let connecting = $state(false);
+	let error = $state('');
+	let disconnected = $state(false);
+
+	let termContainer;
+	let term;
+	let fitAddon;
+	let resizeObserver;
 
 	async function loadNodes() {
 		try {
@@ -22,112 +29,152 @@
 		} catch {}
 	}
 
-	function getPrompt() {
-		const node = nodes.find(n => n.id === selectedNode);
-		const host = node?.name || 'remote';
-		return `root@${host}`;
-	}
+	async function connectTerminal(nodeID) {
+		if (!nodeID) return;
+		await cleanupSession();
 
-	async function runCommand() {
-		const cmd = command.trim();
-		if (!cmd || !selectedNode || running) return;
-
-		cmdHistory = [...cmdHistory, cmd];
-		cmdHistoryIdx = -1;
-
-		const prompt = getPrompt();
-		history = [...history, { type: 'cmd', text: cmd, prompt, cwd }];
-		command = '';
-
-		// Handle client-side commands
-		if (cmd === 'clear') {
-			history = [];
-			return;
-		}
-
-		running = true;
-		await tick();
-		scrollBottom();
+		connecting = true;
+		error = '';
+		disconnected = false;
 
 		try {
-			// Wrap command: cd to cwd first, set TERM, then run, then print cwd
-			const wrapped = `cd ${cwd} 2>/dev/null; TERM=xterm ${cmd}; echo "___CWD___$(pwd)"`;
-			const result = await RunTerminalCommand(selectedNode, wrapped);
+			const cols = term ? term.cols : 80;
+			const rows = term ? term.rows : 24;
+			sessionID = await StartTerminalSession(nodeID, cols, rows);
+			connected = true;
 
-			let output = result.output || '';
-			// Extract new cwd from output
-			const cwdMatch = output.match(/___CWD___(.*)/);
-			if (cwdMatch) {
-				cwd = cwdMatch[1].trim();
-				output = output.replace(/___CWD___.*\n?/, '');
-			}
-
-			if (output.trim()) {
-				history = [...history, { type: 'out', text: output.trimEnd() }];
-			}
-			if (result.error) {
-				// Filter out cd errors since we handle cwd ourselves
-				const errText = result.error.replace(/Process exited with status \d+/, '').trim();
-				if (errText) {
-					history = [...history, { type: 'err', text: errText }];
+			// Listen for output
+			EventsOn('terminal:output:' + sessionID, (data) => {
+				if (term) {
+					const decoded = atob(data);
+					term.write(decoded);
 				}
-			}
+			});
+
+			// Listen for exit
+			EventsOn('terminal:exit:' + sessionID, () => {
+				disconnected = true;
+				connected = false;
+			});
+
+			// Focus terminal
+			if (term) term.focus();
 		} catch (e) {
-			history = [...history, { type: 'err', text: e?.message || String(e) }];
+			error = e?.message || String(e);
+			connected = false;
 		} finally {
-			running = false;
-			await tick();
-			scrollBottom();
-			inputEl?.focus();
+			connecting = false;
 		}
 	}
 
-	function scrollBottom() {
-		const el = document.getElementById('term-scroll');
-		if (el) el.scrollTop = el.scrollHeight;
+	async function cleanupSession() {
+		if (sessionID) {
+			EventsOff('terminal:output:' + sessionID);
+			EventsOff('terminal:exit:' + sessionID);
+			try { await StopTerminalSession(sessionID); } catch {}
+			sessionID = '';
+		}
+		connected = false;
+		disconnected = false;
 	}
 
-	function handleKeydown(e) {
-		if (e.key === 'Enter' && !running) {
-			e.preventDefault();
-			runCommand();
-		} else if (e.key === 'ArrowUp') {
-			e.preventDefault();
-			if (cmdHistory.length > 0) {
-				if (cmdHistoryIdx === -1) cmdHistoryIdx = cmdHistory.length - 1;
-				else if (cmdHistoryIdx > 0) cmdHistoryIdx--;
-				command = cmdHistory[cmdHistoryIdx];
+	async function handleNodeChange() {
+		if (term) {
+			term.clear();
+			term.reset();
+		}
+		if (selectedNode) {
+			await connectTerminal(selectedNode);
+		}
+	}
+
+	function initTerminal() {
+		term = new Terminal({
+			cursorBlink: true,
+			cursorStyle: 'bar',
+			fontSize: 13,
+			fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+			theme: {
+				background: '#0c0c0c',
+				foreground: '#cccccc',
+				cursor: '#28c840',
+				cursorAccent: '#0c0c0c',
+				selectionBackground: 'rgba(255, 255, 255, 0.15)',
+				black: '#000000',
+				red: '#ef4444',
+				green: '#22c55e',
+				yellow: '#eab308',
+				blue: '#3b82f6',
+				magenta: '#a855f7',
+				cyan: '#06b6d4',
+				white: '#d4d4d4',
+				brightBlack: '#737373',
+				brightRed: '#f87171',
+				brightGreen: '#4ade80',
+				brightYellow: '#facc15',
+				brightBlue: '#60a5fa',
+				brightMagenta: '#c084fc',
+				brightCyan: '#22d3ee',
+				brightWhite: '#ffffff',
+			},
+			allowProposedApi: true,
+		});
+
+		fitAddon = new FitAddon();
+		term.loadAddon(fitAddon);
+		term.open(termContainer);
+
+		// Fit after a tick so container has dimensions
+		requestAnimationFrame(() => {
+			fitAddon.fit();
+		});
+
+		// Send input to Go
+		term.onData((data) => {
+			if (sessionID && connected) {
+				WriteTerminalInput(sessionID, btoa(data));
 			}
-		} else if (e.key === 'ArrowDown') {
-			e.preventDefault();
-			if (cmdHistoryIdx >= 0) {
-				cmdHistoryIdx++;
-				if (cmdHistoryIdx >= cmdHistory.length) {
-					cmdHistoryIdx = -1;
-					command = '';
-				} else {
-					command = cmdHistory[cmdHistoryIdx];
+		});
+
+		// Handle resize
+		term.onResize(({ cols, rows }) => {
+			if (sessionID && connected) {
+				ResizeTerminal(sessionID, cols, rows);
+			}
+		});
+
+		// Watch container resize
+		resizeObserver = new ResizeObserver(() => {
+			if (fitAddon) {
+				try { fitAddon.fit(); } catch {}
+			}
+		});
+		resizeObserver.observe(termContainer);
+	}
+
+	onMount(async () => {
+		await loadNodes();
+		// Small delay to ensure container is rendered
+		requestAnimationFrame(() => {
+			if (termContainer) {
+				initTerminal();
+				if (selectedNode) {
+					connectTerminal(selectedNode);
 				}
 			}
-		} else if (e.key === 'l' && e.ctrlKey) {
-			e.preventDefault();
-			history = [];
-		}
-	}
+		});
+	});
 
-	function focusInput() {
-		inputEl?.focus();
-	}
-
-	onMount(() => {
-		loadNodes();
-		setTimeout(() => inputEl?.focus(), 100);
+	onDestroy(() => {
+		cleanupSession();
+		if (resizeObserver) resizeObserver.disconnect();
+		if (term) term.dispose();
 	});
 </script>
 
 <div class="h-full flex flex-col">
 	<!-- Title bar -->
-	<div class="flex items-center justify-between px-5 py-3 shrink-0" style="background: #1a1a1a; border-bottom: 1px solid #333;">
+	<div class="flex items-center justify-between px-4 py-2.5 shrink-0" style="background: #1a1a1a; border-bottom: 1px solid #333;">
 		<div class="flex items-center gap-3">
 			<div class="flex gap-1.5">
 				<div class="w-3 h-3 rounded-full" style="background: #ff5f57;"></div>
@@ -137,6 +184,7 @@
 			{#if nodes.length > 1}
 				<select
 					bind:value={selectedNode}
+					onchange={handleNodeChange}
 					class="text-[12px] font-[JetBrains_Mono,monospace] outline-none cursor-pointer rounded px-2 py-0.5"
 					style="background: #2a2a2a; color: #999; border: 1px solid #444;"
 				>
@@ -153,64 +201,48 @@
 					not connected
 				</span>
 			{/if}
+			{#if connecting}
+				<span class="text-[11px] animate-pulse" style="color: #eab308;">connecting...</span>
+			{:else if connected}
+				<span class="text-[11px]" style="color: #22c55e;">connected</span>
+			{:else if disconnected}
+				<span class="text-[11px]" style="color: #ef4444;">disconnected</span>
+			{/if}
 		</div>
-		<span class="text-[11px] font-[JetBrains_Mono,monospace]" style="color: #555;">
-			{history.filter(h => h.type === 'cmd').length} commands
-		</span>
+		<div class="flex items-center gap-2">
+			{#if disconnected && selectedNode}
+				<button
+					onclick={() => connectTerminal(selectedNode)}
+					class="text-[11px] px-2 py-0.5 rounded font-medium cursor-pointer"
+					style="background: #2a2a2a; color: #22c55e; border: 1px solid #444;"
+				>
+					Reconnect
+				</button>
+			{/if}
+		</div>
 	</div>
 
-	<!-- Terminal body -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- Error bar -->
+	{#if error}
+		<div class="px-4 py-2 text-[12px]" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+			{error}
+		</div>
+	{/if}
+
+	<!-- Terminal -->
 	<div
-		id="term-scroll"
-		class="flex-1 overflow-auto p-4 font-[JetBrains_Mono,monospace] text-[13px] leading-[1.7] min-h-0"
-		style="background: #0c0c0c; color: #cccccc;"
-		onclick={focusInput}
-	>
-		{#if nodes.length === 0}
-			<div style="color: #555;">
-				<pre>No nodes connected. Go to Nodes page to connect a remote server.</pre>
-			</div>
-		{:else}
-			{#if history.length === 0}
-				<div style="color: #555;">
-					<pre style="color: #28c840;">Welcome to gpusched remote terminal</pre>
-					<pre style="color: #555;">Type commands below. Arrow up/down for history. Ctrl+L to clear.</pre>
-					<pre style="color: #555;"> </pre>
-				</div>
-			{/if}
-
-			{#each history as entry}
-				{#if entry.type === 'cmd'}
-					<div>
-						<span style="color: #28c840;">{entry.prompt}</span><span style="color: #555;">:</span><span style="color: #3b82f6;">{entry.cwd || '~'}</span><span style="color: #555;">$ </span><span style="color: #e2e8f0;">{entry.text}</span>
-					</div>
-				{:else if entry.type === 'err'}
-					<pre class="whitespace-pre-wrap" style="color: #ef4444; margin: 0;">{entry.text}</pre>
-				{:else}
-					<pre class="whitespace-pre-wrap" style="color: #b0b0b0; margin: 0;">{entry.text}</pre>
-				{/if}
-			{/each}
-
-			{#if running}
-				<div class="animate-pulse" style="color: #555;">running...</div>
-			{/if}
-
-			<!-- Input line -->
-			{#if !running && nodes.length > 0}
-				<div class="flex items-center">
-					<span style="color: #28c840;">{getPrompt()}</span><span style="color: #555;">:</span><span style="color: #3b82f6;">{cwd}</span><span style="color: #555;">$ </span>
-					<input
-						bind:this={inputEl}
-						type="text"
-						bind:value={command}
-						onkeydown={handleKeydown}
-						autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other"
-						class="flex-1 bg-transparent text-[13px] font-[JetBrains_Mono,monospace]"
-						style="color: #e2e8f0; caret-color: #28c840; outline: none; border: none; box-shadow: none; -webkit-appearance: none;"
-					/>
-				</div>
-			{/if}
-		{/if}
-	</div>
+		bind:this={termContainer}
+		class="flex-1 min-h-0"
+		style="background: #0c0c0c;"
+	></div>
 </div>
+
+<style>
+	:global(.xterm) {
+		padding: 8px;
+		height: 100%;
+	}
+	:global(.xterm-viewport) {
+		overflow-y: auto !important;
+	}
+</style>
