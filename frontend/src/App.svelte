@@ -7,7 +7,6 @@
 	import Jobs from './pages/Jobs.svelte';
 	import Submit from './pages/Submit.svelte';
 	import Settings from './pages/Settings.svelte';
-	import Nodes from './pages/Nodes.svelte';
 	import Logs from './pages/Logs.svelte';
 	import Terminal from './pages/Terminal.svelte';
 	import Docs from './pages/Docs.svelte';
@@ -31,7 +30,6 @@
 		'jobs': 'jobs',
 		'submit': 'submit',
 		'settings': 'settings',
-		'nodes': 'nodes',
 		'monitor': 'monitor',
 		'terminal': 'terminal',
 		'logs': 'logs',
@@ -39,7 +37,7 @@
 	};
 
 	const titles = {
-		dashboard: 'Dashboard', devices: 'GPUs', topology: 'Topology', nodes: 'Nodes',
+		dashboard: 'Dashboard', devices: 'GPUs', topology: 'Topology',
 		monitor: 'Monitor', jobs: 'Jobs', submit: 'Run Job', terminal: 'Terminal',
 		logs: 'Logs', docs: 'Docs', settings: 'Settings'
 	};
@@ -136,7 +134,6 @@
 		{ label: 'Cluster', items: [
 			{ route: 'devices', label: 'GPUs', icon: 'devices' },
 			{ route: 'topology', label: 'Topology', icon: 'topology' },
-			{ route: 'nodes', label: 'Nodes', icon: 'nodes' },
 			{ route: 'monitor', label: 'Monitor', icon: 'monitor' },
 		]},
 		{ label: 'Jobs', items: [
@@ -322,12 +319,8 @@
 				<Jobs {remoteMode} />
 			{:else if page === 'submit'}
 				<Submit {remoteMode} />
-			{:else if page === 'nodes'}
-				<Nodes />
 			{:else if page === 'monitor'}
 				<Monitor {remoteMode} />
-			{:else if page === 'terminal'}
-				<Terminal />
 			{:else if page === 'logs'}
 				<Logs />
 			{:else if page === 'docs'}
@@ -335,6 +328,11 @@
 			{:else if page === 'settings'}
 				<Settings {dark} {toggleTheme} {remoteMode} />
 			{/if}
+
+			<!-- Terminal stays mounted across navigation so the SSH PTY + scrollback persist -->
+			<div class="h-full" style="display: {page === 'terminal' ? 'block' : 'none'};">
+				<Terminal active={page === 'terminal'} />
+			</div>
 		</main>
 	</div>
 </div>

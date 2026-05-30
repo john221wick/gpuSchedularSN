@@ -10,6 +10,36 @@
 	let lastUpdated = $state('');
 	let interval;
 
+	// Expandable detail panel: key = `${nodeID}:${cpu|memory|gpu}`. Sort desc by default.
+	let expandedKey = $state('');
+	let sortAsc = $state(false);
+
+	function toggle(nodeID, which) {
+		const key = nodeID + ':' + which;
+		expandedKey = expandedKey === key ? '' : key;
+	}
+	function isOpen(nodeID, which) {
+		return expandedKey === nodeID + ':' + which;
+	}
+	function sortedProcs(list, metric) {
+		const arr = [...(list || [])];
+		arr.sort((a, b) => {
+			const av = metric === 'cpu' ? (a.cpuPercent || 0) : (a.memMB || 0);
+			const bv = metric === 'cpu' ? (b.cpuPercent || 0) : (b.memMB || 0);
+			return sortAsc ? av - bv : bv - av;
+		});
+		return arr.slice(0, 30);
+	}
+	function sortedGpuProcs(list) {
+		const arr = [...(list || [])];
+		arr.sort((a, b) => (sortAsc ? (a.memMB || 0) - (b.memMB || 0) : (b.memMB || 0) - (a.memMB || 0)));
+		return arr;
+	}
+	function fmtMem(mb) {
+		mb = mb || 0;
+		return mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : Math.round(mb) + 'M';
+	}
+
 	async function refresh() {
 		loading = true;
 		try {
@@ -52,6 +82,34 @@
 		return `${m}m`;
 	}
 </script>
+
+{#snippet procTable(list)}
+	<div class="overflow-x-auto">
+		<table class="w-full">
+			<thead>
+				<tr>
+					<th class="text-left py-1.5 pr-4 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">PID</th>
+					<th class="text-left py-1.5 pr-4 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Command</th>
+					<th class="text-right py-1.5 pr-4 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">CPU%</th>
+					<th class="text-right py-1.5 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Mem</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each list as p (p.pid)}
+					<tr style="border-top: 1px solid var(--border);">
+						<td class="py-1.5 pr-4 text-[12px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{p.pid}</td>
+						<td class="py-1.5 pr-4 text-[12.5px] truncate max-w-[280px]" style="color: var(--text-primary);">{p.command}</td>
+						<td class="py-1.5 pr-4 text-[12px] font-[JetBrains_Mono,monospace] text-right" style="color: var(--text-secondary);">{(p.cpuPercent || 0).toFixed(1)}</td>
+						<td class="py-1.5 text-[12px] font-[JetBrains_Mono,monospace] text-right" style="color: var(--text-secondary);">{fmtMem(p.memMB)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+		{#if list.length === 0}
+			<div class="py-3 text-[12px]" style="color: var(--text-muted);">No process data.</div>
+		{/if}
+	</div>
+{/snippet}
 
 <div class="p-8 space-y-5 max-w-[1100px]">
 	<!-- Header -->
@@ -121,35 +179,120 @@
 				{#if !node.reachable}
 					<div class="px-4 py-4 text-[12.5px]" style="color: #f85149;">{node.error || 'Node unreachable'}</div>
 				{:else}
-					<!-- Host stats -->
+					<!-- Machine info -->
+					{#if node.host.osName || node.host.kernel || node.host.arch || node.host.cpuModel}
+						<div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2.5 text-[11.5px]" style="border-bottom: 1px solid var(--border); color: var(--text-secondary);">
+							{#if node.host.osName}<span><span style="color: var(--text-muted);">OS</span> {node.host.osName}</span>{/if}
+							{#if node.host.kernel}<span><span style="color: var(--text-muted);">kernel</span> <span class="font-[JetBrains_Mono,monospace]">{node.host.kernel}</span></span>{/if}
+							{#if node.host.arch}<span><span style="color: var(--text-muted);">arch</span> <span class="font-[JetBrains_Mono,monospace]">{node.host.arch}</span></span>{/if}
+							{#if node.host.cpuModel}<span><span style="color: var(--text-muted);">CPU</span> {node.host.cpuModel}</span>{/if}
+						</div>
+					{/if}
+
+					<!-- Host stat tiles (click to expand) -->
 					<div class="grid grid-cols-3 gap-px" style="background: var(--border);">
 						<!-- CPU -->
-						<div class="p-4" style="background: var(--bg-secondary);">
-							<div class="text-[10.5px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">CPU</div>
+						<button type="button" onclick={() => toggle(node.nodeID, 'cpu')}
+							class="p-4 text-left cursor-pointer transition-colors"
+							style="background: {isOpen(node.nodeID, 'cpu') ? 'var(--hover-bg)' : 'var(--bg-secondary)'};"
+							onmouseenter={(e) => { if (!isOpen(node.nodeID, 'cpu')) e.currentTarget.style.background = 'var(--hover-bg)'; }}
+							onmouseleave={(e) => { if (!isOpen(node.nodeID, 'cpu')) e.currentTarget.style.background = 'var(--bg-secondary)'; }}>
+							<div class="flex items-center justify-between">
+								<span class="text-[10.5px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">CPU</span>
+								<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted); transition: transform .2s; transform: rotate({isOpen(node.nodeID, 'cpu') ? 180 : 0}deg);"><polyline points="6 9 12 15 18 9"/></svg>
+							</div>
 							<div class="text-[20px] font-semibold mt-1 font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{(node.host.cpuPercent || 0).toFixed(0)}<span class="text-[13px]" style="color: var(--text-tertiary);">%</span></div>
 							<div class="w-full h-1 rounded-full overflow-hidden mt-2" style="background: var(--bar-bg);">
 								<div class="h-full rounded-full transition-all duration-500" style="width: {clamp(node.host.cpuPercent)}%; background: var(--bar-fill);"></div>
 							</div>
-							<div class="text-[11px] mt-1.5" style="color: var(--text-tertiary);">load {(node.host.loadAvg?.[0] || 0).toFixed(2)}</div>
-						</div>
+							<div class="text-[11px] mt-1.5" style="color: var(--text-tertiary);">load {(node.host.loadAvg?.[0] || 0).toFixed(2)} · {node.host.cpuCores || 0} cores</div>
+						</button>
 						<!-- Memory -->
-						<div class="p-4" style="background: var(--bg-secondary);">
-							<div class="text-[10.5px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Memory</div>
+						<button type="button" onclick={() => toggle(node.nodeID, 'memory')}
+							class="p-4 text-left cursor-pointer transition-colors"
+							style="background: {isOpen(node.nodeID, 'memory') ? 'var(--hover-bg)' : 'var(--bg-secondary)'};"
+							onmouseenter={(e) => { if (!isOpen(node.nodeID, 'memory')) e.currentTarget.style.background = 'var(--hover-bg)'; }}
+							onmouseleave={(e) => { if (!isOpen(node.nodeID, 'memory')) e.currentTarget.style.background = 'var(--bg-secondary)'; }}>
+							<div class="flex items-center justify-between">
+								<span class="text-[10.5px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Memory</span>
+								<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted); transition: transform .2s; transform: rotate({isOpen(node.nodeID, 'memory') ? 180 : 0}deg);"><polyline points="6 9 12 15 18 9"/></svg>
+							</div>
 							<div class="text-[20px] font-semibold mt-1 font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{memPct(node.host.memUsedMB, node.host.memTotalMB).toFixed(0)}<span class="text-[13px]" style="color: var(--text-tertiary);">%</span></div>
 							<div class="w-full h-1 rounded-full overflow-hidden mt-2" style="background: var(--bar-bg);">
 								<div class="h-full rounded-full transition-all duration-500" style="width: {memPct(node.host.memUsedMB, node.host.memTotalMB)}%; background: var(--bar-fill);"></div>
 							</div>
 							<div class="text-[11px] mt-1.5 font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{fmtGB(node.host.memUsedMB)} / {fmtGB(node.host.memTotalMB)} GB</div>
-						</div>
-						<!-- GPUs summary -->
-						<div class="p-4" style="background: var(--bg-secondary);">
-							<div class="text-[10.5px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">GPUs</div>
-							<div class="text-[20px] font-semibold mt-1 font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{node.gpus?.length || 0}</div>
-							<div class="text-[11px] mt-2.5" style="color: var(--text-tertiary);">
-								{node.containers?.available ? `${node.containers.containers?.length || 0} container${(node.containers.containers?.length || 0) !== 1 ? 's' : ''}` : 'docker n/a'}
+						</button>
+						<!-- GPUs -->
+						<button type="button" onclick={() => toggle(node.nodeID, 'gpu')}
+							class="p-4 text-left cursor-pointer transition-colors"
+							style="background: {isOpen(node.nodeID, 'gpu') ? 'var(--hover-bg)' : 'var(--bg-secondary)'};"
+							onmouseenter={(e) => { if (!isOpen(node.nodeID, 'gpu')) e.currentTarget.style.background = 'var(--hover-bg)'; }}
+							onmouseleave={(e) => { if (!isOpen(node.nodeID, 'gpu')) e.currentTarget.style.background = 'var(--bg-secondary)'; }}>
+							<div class="flex items-center justify-between">
+								<span class="text-[10.5px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">GPUs</span>
+								<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted); transition: transform .2s; transform: rotate({isOpen(node.nodeID, 'gpu') ? 180 : 0}deg);"><polyline points="6 9 12 15 18 9"/></svg>
 							</div>
-						</div>
+							<div class="text-[20px] font-semibold mt-1 font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{node.gpus?.length || 0}</div>
+							<div class="text-[11px] mt-2.5" style="color: var(--text-tertiary);">{node.gpuProcesses?.length || 0} GPU proc{(node.gpuProcesses?.length || 0) !== 1 ? 's' : ''}</div>
+						</button>
 					</div>
+
+					<!-- Expanded detail panel -->
+					{#if expandedKey.startsWith(node.nodeID + ':')}
+						<div class="px-4 py-3" style="border-top: 1px solid var(--border);">
+							<div class="flex items-center justify-between mb-3">
+								<span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">
+									{isOpen(node.nodeID, 'cpu') ? 'CPU cores & top processes' : isOpen(node.nodeID, 'memory') ? 'Top processes by memory' : 'GPU processes'}
+								</span>
+								<button type="button" onclick={() => (sortAsc = !sortAsc)}
+									class="text-[11px] px-2 py-1 rounded font-medium cursor-pointer"
+									style="background: var(--bg-tertiary); color: var(--text-secondary);">
+									{sortAsc ? 'Ascending ↑' : 'Descending ↓'}
+								</button>
+							</div>
+
+							{#if isOpen(node.nodeID, 'cpu')}
+								{#if node.host.perCoreCPU?.length}
+									<div class="grid grid-cols-8 gap-1.5 mb-4">
+										{#each node.host.perCoreCPU as c, i}
+											<div class="rounded p-1.5" style="background: var(--bg-tertiary);">
+												<div class="text-[9px] font-[JetBrains_Mono,monospace]" style="color: var(--text-muted);">c{i}</div>
+												<div class="text-[12px] font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{(c || 0).toFixed(0)}%</div>
+												<div class="h-1 rounded-full mt-1 overflow-hidden" style="background: var(--bar-bg);"><div class="h-full rounded-full" style="width:{clamp(c)}%; background: var(--bar-fill);"></div></div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+								{@render procTable(sortedProcs(node.processes, 'cpu'))}
+							{:else if isOpen(node.nodeID, 'memory')}
+								{@render procTable(sortedProcs(node.processes, 'mem'))}
+							{:else if isOpen(node.nodeID, 'gpu')}
+								{#if node.gpuProcesses?.length}
+									<div class="overflow-x-auto">
+										<table class="w-full">
+											<thead><tr>
+												<th class="text-left py-1.5 pr-4 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">PID</th>
+												<th class="text-left py-1.5 pr-4 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">Process</th>
+												<th class="text-right py-1.5 text-[10.5px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">GPU Mem</th>
+											</tr></thead>
+											<tbody>
+												{#each sortedGpuProcs(node.gpuProcesses) as p (p.pid)}
+													<tr style="border-top: 1px solid var(--border);">
+														<td class="py-1.5 pr-4 text-[12px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{p.pid}</td>
+														<td class="py-1.5 pr-4 text-[12.5px] truncate max-w-[320px]" style="color: var(--text-primary);">{p.name}</td>
+														<td class="py-1.5 text-[12px] font-[JetBrains_Mono,monospace] text-right" style="color: var(--text-secondary);">{fmtMem(p.memMB)}</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								{:else}
+									<div class="text-[12.5px]" style="color: var(--text-muted);">No GPU processes (nvidia-smi unavailable or no compute apps).</div>
+								{/if}
+							{/if}
+						</div>
+					{/if}
 
 					<!-- GPU rows -->
 					{#if node.gpus?.length}

@@ -497,10 +497,12 @@ type NodeMonitorInfo struct {
 	NodeName    string                      `json:"nodeName"`
 	Reachable   bool                        `json:"reachable"`
 	Error       string                      `json:"error,omitempty"`
-	Host        agentserver.HostStats       `json:"host"`
-	GPUs        []DeviceInfo                `json:"gpus"`
-	Containers  agentserver.ContainerReport `json:"containers"`
-	CollectedAt string                      `json:"collectedAt"`
+	Host         agentserver.HostStats       `json:"host"`
+	GPUs         []DeviceInfo                `json:"gpus"`
+	Containers   agentserver.ContainerReport `json:"containers"`
+	Processes    []agentserver.ProcInfo      `json:"processes"`
+	GPUProcesses []agentserver.GPUProcInfo   `json:"gpuProcesses"`
+	CollectedAt  string                      `json:"collectedAt"`
 }
 
 // GetClusterMonitor polls every connected node's /monitor endpoint.
@@ -541,6 +543,8 @@ func (a *App) GetClusterMonitor() []NodeMonitorInfo {
 			}
 		}
 		info.Containers = mon.Containers
+		info.Processes = mon.Processes
+		info.GPUProcesses = mon.GPUProcesses
 		info.CollectedAt = mon.CollectedAt
 		result = append(result, info)
 	}

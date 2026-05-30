@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetDashboard, GetClusterDashboard, SetRemoteMode } from '../lib/api.js';
+	import { GetDashboard, SetRemoteMode } from '../lib/api.js';
+	import Nodes from './Nodes.svelte';
 
 	let { remoteMode = false, onModeChange = () => {} } = $props();
 	let dashboard = $state(null);
@@ -8,8 +9,10 @@
 	let interval;
 
 	async function refresh() {
+		// Remote mode shows node management (stats live in Monitor) — no cluster cards.
+		if (remoteMode) { dashboard = null; return; }
 		try {
-			dashboard = remoteMode ? await GetClusterDashboard() : await GetDashboard();
+			dashboard = await GetDashboard();
 		} catch (e) {
 			console.error('Dashboard refresh failed:', e);
 		}
@@ -47,7 +50,7 @@
 		<div>
 			<h1 class="text-lg font-semibold" style="color: var(--text-primary);">Dashboard</h1>
 			<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">
-				{remoteMode ? 'Cluster overview' : 'System overview'}
+				{remoteMode ? 'Cluster nodes' : 'System overview'}
 			</p>
 		</div>
 		<div class="flex items-center gap-1 rounded-lg p-0.5" style="background: var(--bg-tertiary);">
@@ -70,7 +73,10 @@
 		</div>
 	</div>
 
-	{#if dashboard}
+	{#if remoteMode}
+		<!-- Node management (connect / list / sync / saved) -->
+		<Nodes embedded />
+	{:else if dashboard}
 		<div class="grid grid-cols-4 gap-3">
 			<div class="rounded-lg p-4" style="background: var(--bg-secondary); border: 1px solid var(--border);">
 				<div class="text-[11px] font-medium uppercase tracking-wider" style="color: var(--text-tertiary);">GPUs</div>

@@ -2,6 +2,9 @@
 	import { onMount } from 'svelte';
 	import { GetNodes, GetSavedNodes, ConnectNode, DisconnectNode, ReconnectNode, RemoveNode, SetNodePaths, SyncFilesToNode } from '../lib/api.js';
 
+	// embedded=true when rendered inside Dashboard (drops page padding + big title)
+	let { embedded = false } = $props();
+
 	let nodes = $state([]);
 	let savedNodes = $state([]);
 	let showConnect = $state(false);
@@ -159,13 +162,20 @@
 	});
 </script>
 
-<div class="p-8 space-y-6 max-w-[1000px]">
+<div class={embedded ? 'space-y-6' : 'p-8 space-y-6 max-w-[1000px]'}>
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-lg font-semibold" style="color: var(--text-primary);">Nodes</h1>
-			<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">
-				{nodes.length} node{nodes.length !== 1 ? 's' : ''} connected
-			</p>
+			{#if embedded}
+				<h2 class="text-[13px] font-semibold" style="color: var(--text-primary);">Nodes</h2>
+				<p class="text-[12px] mt-0.5" style="color: var(--text-tertiary);">
+					{nodes.length} node{nodes.length !== 1 ? 's' : ''} connected
+				</p>
+			{:else}
+				<h1 class="text-lg font-semibold" style="color: var(--text-primary);">Nodes</h1>
+				<p class="text-[13px] mt-0.5" style="color: var(--text-tertiary);">
+					{nodes.length} node{nodes.length !== 1 ? 's' : ''} connected
+				</p>
+			{/if}
 		</div>
 		<button
 			onclick={() => { showConnect = !showConnect; connectError = ''; connectSuccess = ''; }}

@@ -20,6 +20,8 @@ export function GetClusterDashboard():Promise<desktop.DashboardInfo>;
 
 export function GetClusterDevices():Promise<Array<desktop.ClusterDeviceInfo>>;
 
+export function GetClusterMonitor():Promise<Array<desktop.NodeMonitorInfo>>;
+
 export function GetClusterQueuedJobs():Promise<Array<desktop.JobInfo>>;
 
 export function GetClusterRunningJobs():Promise<Array<desktop.JobInfo>>;

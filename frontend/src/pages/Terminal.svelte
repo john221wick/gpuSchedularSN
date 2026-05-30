@@ -1,10 +1,15 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import '@xterm/xterm/css/xterm.css';
 	import { GetNodes, StartTerminalSession, WriteTerminalInput, ResizeTerminal, StopTerminalSession } from '../lib/api.js';
 	import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime.js';
+
+	// active = true when the Terminal route is the visible page. The component
+	// stays mounted across navigation so the PTY + scrollback survive.
+	let { active = false } = $props();
+	let booted = false;
 
 	let nodes = $state([]);
 	let selectedNode = $state('');
@@ -88,6 +93,27 @@
 		}
 	}
 
+	let fitScheduled = false;
+	// Fit via proposeDimensions + diff so we only resize when dims actually
+	// change — prevents the FitAddon ↔ scrollbar feedback loop.
+	function doFit() {
+		if (!active || !fitAddon || !term) return;
+		try {
+			const dims = fitAddon.proposeDimensions();
+			if (dims && Number.isFinite(dims.cols) && Number.isFinite(dims.rows) &&
+				dims.cols > 0 && dims.rows > 0 &&
+				(dims.cols !== term.cols || dims.rows !== term.rows)) {
+				term.resize(dims.cols, dims.rows);
+			}
+		} catch {}
+	}
+	// rAF-debounced so a burst of ResizeObserver callbacks coalesces into one fit.
+	function scheduleFit() {
+		if (fitScheduled) return;
+		fitScheduled = true;
+		requestAnimationFrame(() => { fitScheduled = false; doFit(); });
+	}
+
 	function initTerminal() {
 		term = new Terminal({
 			cursorBlink: true,
@@ -125,9 +151,7 @@
 		term.open(termContainer);
 
 		// Fit after a tick so container has dimensions
-		requestAnimationFrame(() => {
-			fitAddon.fit();
-		});
+		scheduleFit();
 
 		// Send input to Go
 		term.onData((data) => {
@@ -143,26 +167,37 @@
 			}
 		});
 
-		// Watch container resize
-		resizeObserver = new ResizeObserver(() => {
-			if (fitAddon) {
-				try { fitAddon.fit(); } catch {}
-			}
-		});
+		// Watch container resize — debounced + diff-guarded (see scheduleFit/doFit)
+		resizeObserver = new ResizeObserver(() => scheduleFit());
 		resizeObserver.observe(termContainer);
 	}
 
-	onMount(async () => {
+	async function boot() {
 		await loadNodes();
-		// Small delay to ensure container is rendered
 		requestAnimationFrame(() => {
-			if (termContainer) {
-				initTerminal();
-				if (selectedNode) {
+			if (termContainer && !term) initTerminal();
+			doFit(); // size before connecting so the PTY opens at the right dimensions
+			requestAnimationFrame(() => {
+				if (selectedNode && !sessionID && !connecting) {
 					connectTerminal(selectedNode);
 				}
-			}
+				term?.focus();
+			});
 		});
+	}
+
+	function onShow() {
+		// Session persists across nav — just refit/focus and re-poll node status.
+		scheduleFit();
+		term?.focus();
+		loadNodes();
+	}
+
+	// Lazy-init on first open; on later opens reuse the live session.
+	$effect(() => {
+		if (!active) return;
+		if (!booted) { booted = true; boot(); }
+		else onShow();
 	});
 
 	onDestroy(() => {
@@ -244,5 +279,14 @@
 	}
 	:global(.xterm-viewport) {
 		overflow-y: auto !important;
+		scrollbar-gutter: stable;
+	}
+	/* Keep the scrollbar from changing content width (avoids fit/resize oscillation) */
+	:global(.xterm-viewport)::-webkit-scrollbar {
+		width: 10px;
+	}
+	:global(.xterm-viewport)::-webkit-scrollbar-thumb {
+		background: #333;
+		border-radius: 5px;
 	}
 </style>
