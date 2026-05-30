@@ -82,6 +82,7 @@ func NewAgentServer(dir string) (*AgentServer, error) {
 	mux.HandleFunc("GET /topology", handlers.GetTopology)
 	mux.HandleFunc("POST /jobs", handlers.PostJob)
 	mux.HandleFunc("GET /status", handlers.GetStatus)
+	mux.HandleFunc("GET /monitor", handlers.GetMonitor)
 	mux.HandleFunc("GET /logs/{id}", handlers.GetLogs)
 	mux.HandleFunc("DELETE /jobs/{id}", handlers.DeleteJob)
 

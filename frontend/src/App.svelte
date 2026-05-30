@@ -11,6 +11,7 @@
 	import Logs from './pages/Logs.svelte';
 	import Terminal from './pages/Terminal.svelte';
 	import Docs from './pages/Docs.svelte';
+	import Monitor from './pages/Monitor.svelte';
 	import appicon from './lib/assets/appicon.png';
 
 	let page = $state('dashboard');
@@ -31,6 +32,7 @@
 		'submit': 'submit',
 		'settings': 'settings',
 		'nodes': 'nodes',
+		'monitor': 'monitor',
 		'terminal': 'terminal',
 		'logs': 'logs',
 		'docs': 'docs'
@@ -38,8 +40,8 @@
 
 	const titles = {
 		dashboard: 'Dashboard', devices: 'GPUs', topology: 'Topology', nodes: 'Nodes',
-		jobs: 'Jobs', submit: 'Run Job', terminal: 'Terminal', logs: 'Logs',
-		docs: 'Docs', settings: 'Settings'
+		monitor: 'Monitor', jobs: 'Jobs', submit: 'Run Job', terminal: 'Terminal',
+		logs: 'Logs', docs: 'Docs', settings: 'Settings'
 	};
 
 	// Lucide-style inline icons (inner SVG)
@@ -48,6 +50,7 @@
 		devices: '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
 		topology: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v3.3M11 11.5l-4.4 5.6M13 11.5l4.4 5.6"/>',
 		nodes: '<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+		monitor: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
 		jobs: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
 		submit: '<path d="M6 4.5v15l13-7.5-13-7.5z"/>',
 		terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
@@ -134,6 +137,7 @@
 			{ route: 'devices', label: 'GPUs', icon: 'devices' },
 			{ route: 'topology', label: 'Topology', icon: 'topology' },
 			{ route: 'nodes', label: 'Nodes', icon: 'nodes' },
+			{ route: 'monitor', label: 'Monitor', icon: 'monitor' },
 		]},
 		{ label: 'Jobs', items: [
 			{ route: 'jobs', label: 'Jobs', icon: 'jobs' },
@@ -320,6 +324,8 @@
 				<Submit {remoteMode} />
 			{:else if page === 'nodes'}
 				<Nodes />
+			{:else if page === 'monitor'}
+				<Monitor {remoteMode} />
 			{:else if page === 'terminal'}
 				<Terminal />
 			{:else if page === 'logs'}

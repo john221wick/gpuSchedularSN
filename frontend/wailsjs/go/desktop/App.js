@@ -38,6 +38,10 @@ export function GetClusterDevices() {
   return window['go']['desktop']['App']['GetClusterDevices']();
 }
 
+export function GetClusterMonitor() {
+  return window['go']['desktop']['App']['GetClusterMonitor']();
+}
+
 export function GetClusterQueuedJobs() {
   return window['go']['desktop']['App']['GetClusterQueuedJobs']();
 }

@@ -48,6 +48,10 @@ func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, StatusResponse{Jobs: jobs})
 }
 
+func (h *Handlers) GetMonitor(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, CollectMonitor())
+}
+
 func (h *Handlers) GetLogs(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
 	if jobID == "" {

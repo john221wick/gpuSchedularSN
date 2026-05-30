@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/john221wick/gpuSchedularSN/internal/agent"
+	"github.com/john221wick/gpuSchedularSN/internal/agentserver"
 	"github.com/john221wick/gpuSchedularSN/internal/cluster"
 	"github.com/john221wick/gpuSchedularSN/internal/scheduler"
 	"github.com/john221wick/gpuSchedularSN/internal/state"
@@ -486,6 +487,62 @@ func (a *App) GetNodes() []NodeInfo {
 			Arch:      n.Arch,
 			OS:        n.OS,
 		}
+	}
+	return result
+}
+
+// NodeMonitorInfo is per-node machine + container health for the Monitor page.
+type NodeMonitorInfo struct {
+	NodeID      string                      `json:"nodeID"`
+	NodeName    string                      `json:"nodeName"`
+	Reachable   bool                        `json:"reachable"`
+	Error       string                      `json:"error,omitempty"`
+	Host        agentserver.HostStats       `json:"host"`
+	GPUs        []DeviceInfo                `json:"gpus"`
+	Containers  agentserver.ContainerReport `json:"containers"`
+	CollectedAt string                      `json:"collectedAt"`
+}
+
+// GetClusterMonitor polls every connected node's /monitor endpoint.
+// Per-node failures are reported inline (Reachable=false) so one dead node
+// does not hide the others.
+func (a *App) GetClusterMonitor() []NodeMonitorInfo {
+	if a.manager == nil {
+		return nil
+	}
+	nodes := a.manager.AllNodes()
+	result := make([]NodeMonitorInfo, 0, len(nodes))
+	for _, n := range nodes {
+		info := NodeMonitorInfo{NodeID: n.ID, NodeName: n.Name}
+		client, ok := a.manager.GetClient(n.ID)
+		if !ok {
+			info.Error = "node not connected"
+			result = append(result, info)
+			continue
+		}
+		mon, err := client.GetMonitor()
+		if err != nil {
+			info.Error = err.Error()
+			result = append(result, info)
+			continue
+		}
+		info.Reachable = true
+		info.Host = mon.Host
+		info.GPUs = make([]DeviceInfo, len(mon.GPUs))
+		for i, d := range mon.GPUs {
+			info.GPUs[i] = DeviceInfo{
+				ID:             d.ID,
+				Vendor:         d.Vendor.String(),
+				Name:           d.Name,
+				VRAMTotalMB:    d.VRAMTotalMB,
+				VRAMUsedMB:     d.VRAMUsedMB,
+				UtilizationPct: d.UtilizationPct,
+				TemperatureC:   d.TemperatureC,
+			}
+		}
+		info.Containers = mon.Containers
+		info.CollectedAt = mon.CollectedAt
+		result = append(result, info)
 	}
 	return result
 }

@@ -17,6 +17,7 @@ type AgentClient interface {
 	GetTopology() (*agentserver.TopologyResponse, error)
 	PostJob(spec agentserver.JobSpec) error
 	GetStatus() (*agentserver.StatusResponse, error)
+	GetMonitor() (*agentserver.MonitorResponse, error)
 	GetLogs(jobID string, offset int64) (*agentserver.LogChunk, error)
 	DeleteJob(jobID string) error
 	Ping() error
@@ -100,6 +101,24 @@ func (c *httpAgentClient) GetStatus() (*agentserver.StatusResponse, error) {
 	var result agentserver.StatusResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode status: %w", err)
+	}
+	return &result, nil
+}
+
+func (c *httpAgentClient) GetMonitor() (*agentserver.MonitorResponse, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/monitor")
+	if err != nil {
+		return nil, fmt.Errorf("get monitor: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.readError(resp)
+	}
+
+	var result agentserver.MonitorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode monitor: %w", err)
 	}
 	return &result, nil
 }

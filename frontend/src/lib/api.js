@@ -43,6 +43,7 @@ import {
 	ClusterSubmitJob,
 	ClusterKillJob,
 	GetClusterDashboard,
+	GetClusterMonitor,
 	// App logs
 	GetAppLogs,
 	GetAppLogCount
@@ -86,6 +87,7 @@ export {
 	ClusterSubmitJob,
 	ClusterKillJob,
 	GetClusterDashboard,
+	GetClusterMonitor,
 	// App logs
 	GetAppLogs,
 	GetAppLogCount
