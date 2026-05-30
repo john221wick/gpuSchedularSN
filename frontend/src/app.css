@@ -1,50 +1,63 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
 :root {
-	--sidebar-width: 200px;
+	--sidebar-width: 248px;
+	--topbar-height: 44px;
+	--radius: 10px;
 
-	/* Light theme */
-	--bg-primary: #ffffff;
-	--bg-secondary: #f7f7f8;
-	--bg-tertiary: #efefef;
-	--bg-sidebar: #f7f7f8;
-	--border: #e2e2e5;
-	--text-primary: #111111;
-	--text-secondary: #555555;
-	--text-tertiary: #888888;
-	--text-muted: #aaaaaa;
-	--accent: #111111;
+	/* Light theme — Claude "cream" */
+	--bg-primary: #faf9f5;
+	--bg-secondary: #ffffff;
+	--bg-tertiary: #ecebe3;
+	--bg-elevated: #ffffff;
+	--bg-sidebar: #f2f0e9;
+	--border: #e3e1d6;
+	--border-subtle: #eceae1;
+	--text-primary: #1f1e1d;
+	--text-secondary: #5c5b54;
+	--text-tertiary: #8a887e;
+	--text-muted: #b3b1a6;
+	--accent: #c96442;
+	--accent-hover: #b5573a;
+	--accent-soft: rgba(201, 100, 66, 0.1);
 	--accent-text: #ffffff;
-	--bar-bg: #e2e2e5;
-	--bar-fill: #999999;
+	--bar-bg: #e3e1d6;
+	--bar-fill: #a8a698;
 	--input-bg: #ffffff;
-	--hover-bg: #f0f0f2;
+	--hover-bg: #ecebe3;
+	--active-bg: #e4e2d8;
 }
 
 .dark {
-	--bg-primary: #111113;
-	--bg-secondary: #19191b;
-	--bg-tertiary: #222225;
-	--bg-sidebar: #111113;
-	--border: #2a2a2d;
-	--text-primary: #eeeeee;
-	--text-secondary: #999999;
-	--text-tertiary: #666666;
-	--text-muted: #444444;
-	--accent: #eeeeee;
-	--accent-text: #111111;
-	--bar-bg: #2a2a2d;
-	--bar-fill: #555555;
-	--input-bg: #19191b;
-	--hover-bg: #1f1f22;
+	/* Dark theme — Claude "warm charcoal" */
+	--bg-primary: #262624;
+	--bg-secondary: #30302e;
+	--bg-tertiary: #3a3937;
+	--bg-elevated: #2d2c2a;
+	--bg-sidebar: #1f1e1d;
+	--border: #3d3c39;
+	--border-subtle: #333230;
+	--text-primary: #f5f4ef;
+	--text-secondary: #c2c0b6;
+	--text-tertiary: #8c8a80;
+	--text-muted: #6b6960;
+	--accent: #d97757;
+	--accent-hover: #c96442;
+	--accent-soft: rgba(217, 119, 87, 0.12);
+	--accent-text: #ffffff;
+	--bar-bg: #3a3937;
+	--bar-fill: #8c8a80;
+	--input-bg: #1f1e1d;
+	--hover-bg: #30302e;
+	--active-bg: #383735;
 }
 
 html {
-	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-family: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 body {
@@ -53,19 +66,28 @@ body {
 	color: var(--text-secondary);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+	letter-spacing: -0.006em;
+}
+
+::selection {
+	background: var(--accent-soft);
+	color: var(--text-primary);
 }
 
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 8px;
+	height: 8px;
 }
 ::-webkit-scrollbar-track {
 	background: transparent;
 }
 ::-webkit-scrollbar-thumb {
 	background: var(--border);
-	border-radius: 3px;
+	border-radius: 4px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-	background: var(--text-tertiary);
+	background: var(--text-muted);
+	background-clip: padding-box;
 }
