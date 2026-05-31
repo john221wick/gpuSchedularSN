@@ -1,8 +1,8 @@
 /*
  * GPU dispatcher — routes to vendor-specific backends.
  *
- * Detection order: NVIDIA (NVML) → AMD (ROCm SMI) → Intel (Level Zero) → Apple (IOKit)
- * On Linux, tries each vendor via dlopen. First one that returns GPUs wins.
+ * Detection order: NVIDIA (NVML) → AMD (ROCm SMI) → AMDGPU sysfs → Intel (Level Zero) → Apple (IOKit)
+ * On Linux, tries each backend. First one that returns GPUs wins.
  * On macOS, only Apple backend is available.
  */
 
@@ -18,6 +18,7 @@
 #ifdef __linux__
 #include "vendor/nvidia/nvml.h"
 #include "vendor/amd/rocm.h"
+#include "vendor/amd/sysfs.h"
 #include "vendor/intel/levelzero.h"
 #endif
 
@@ -33,6 +34,7 @@ typedef enum {
     BACKEND_NONE = 0,
     BACKEND_NVIDIA,
     BACKEND_AMD,
+    BACKEND_AMD_SYSFS,
     BACKEND_INTEL,
     BACKEND_APPLE
 } active_backend_t;
@@ -56,10 +58,18 @@ int gpu_init(void) {
         return n;
     }
 
-    /* Try AMD */
+    /* Try AMD via ROCm SMI first. */
     n = rocm_detect();
     if (n > 0) {
         active_backend = BACKEND_AMD;
+        active_count = n;
+        return n;
+    }
+
+    /* Fallback for Radeon/APU devices exposed by the Linux amdgpu driver. */
+    n = amdgpu_sysfs_detect();
+    if (n > 0) {
+        active_backend = BACKEND_AMD_SYSFS;
         active_count = n;
         return n;
     }
@@ -93,6 +103,7 @@ int gpu_get_devices(struct gpu_device *out, int max_devices) {
 #ifdef __linux__
         case BACKEND_NVIDIA: return nvml_enumerate(out, max_devices);
         case BACKEND_AMD:    return rocm_enumerate(out, max_devices);
+        case BACKEND_AMD_SYSFS: return amdgpu_sysfs_enumerate(out, max_devices);
         case BACKEND_INTEL:  return ze_enumerate(out, max_devices);
 #endif
 #ifdef __APPLE__
@@ -107,6 +118,7 @@ int gpu_get_topology(struct gpu_link *out, int max_links) {
 #ifdef __linux__
         case BACKEND_NVIDIA: return nvml_topology(out, max_links, active_count);
         case BACKEND_AMD:    return rocm_topology(out, max_links, active_count);
+        case BACKEND_AMD_SYSFS: return amdgpu_sysfs_topology(out, max_links, active_count);
         case BACKEND_INTEL:  return ze_topology(out, max_links, active_count);
 #endif
 #ifdef __APPLE__
@@ -121,6 +133,7 @@ int gpu_refresh(struct gpu_device *out, int max_devices) {
 #ifdef __linux__
         case BACKEND_NVIDIA: return nvml_refresh(out, max_devices);
         case BACKEND_AMD:    return rocm_refresh(out, max_devices);
+        case BACKEND_AMD_SYSFS: return amdgpu_sysfs_refresh(out, max_devices);
         case BACKEND_INTEL:  return ze_refresh(out, max_devices);
 #endif
 #ifdef __APPLE__
@@ -135,6 +148,7 @@ void gpu_shutdown(void) {
 #ifdef __linux__
         case BACKEND_NVIDIA: nvml_shutdown(); break;
         case BACKEND_AMD:    rocm_shutdown(); break;
+        case BACKEND_AMD_SYSFS: amdgpu_sysfs_shutdown(); break;
         case BACKEND_INTEL:  ze_shutdown(); break;
 #endif
 #ifdef __APPLE__

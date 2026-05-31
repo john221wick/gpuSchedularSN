@@ -135,7 +135,7 @@ gpusched kill <job-id>
 | Vendor | Detection Method | Environment Variable |
 |--------|------------------|---------------------|
 | NVIDIA | nvidia-smi | `CUDA_VISIBLE_DEVICES` |
-| AMD | ROCm | `HIP_VISIBLE_DEVICES` |
+| AMD | ROCm SMI, with AMDGPU sysfs fallback | `HIP_VISIBLE_DEVICES` |
 | Intel | GPU metrics | `GPU_DEVICE_ORDINAL` |
 | Apple | Metal/sysctl | Native (single GPU) |
 

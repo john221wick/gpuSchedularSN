@@ -13,7 +13,7 @@ gpuSchedularSN is a single-node GPU scheduler written in Go. you can use it as a
 2. Make
 3. For desktop app: Wails v2, Svelte 5, pnpm
 4. For NVIDIA GPUs: CUDA toolkit (for nvidia-smi)
-5. For AMD GPUs: ROCm
+5. For AMD GPUs: ROCm for HIP compute workloads; Linux AMDGPU sysfs is enough for basic Radeon/APU detection and monitoring
 
 ## Building the CLI
 

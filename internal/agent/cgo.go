@@ -9,6 +9,7 @@ package agent
 #include "gpu.h"
 #include "vendor/nvidia/nvml.c"
 #include "vendor/amd/rocm.c"
+#include "vendor/amd/sysfs.c"
 #include "vendor/intel/levelzero.c"
 #include "vendor/apple/metal.c"
 #include "gpu.c"

@@ -22,7 +22,7 @@ this way the mock build (pure Go, no C) works fine and the real build picks up t
 
 ## Platform Detection
 
-i used `#ifdef __APPLE__` and `#ifdef __linux__` in `gpu.c`. so the same source code detects Apple GPUs on macOS (using `sysctl`) and scans the PCI bus on Linux for NVIDIA/AMD/Intel.
+i used `#ifdef __APPLE__` and `#ifdef __linux__` in `gpu.c`. so the same source code detects Apple GPUs on macOS (using `sysctl`) and uses Linux GPU backends for NVIDIA/AMD/Intel. AMD uses ROCm SMI first, then falls back to AMDGPU sysfs so Radeon/APU devices can still be detected and monitored when ROCm does not expose them.
 
 the binary you build on a Mac will detect Apple GPU. the binary you build on Linux will detect whatever GPU is there. one codebase, different behavior at compile time.
 

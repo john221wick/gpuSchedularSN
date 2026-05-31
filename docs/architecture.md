@@ -23,7 +23,7 @@ the scheduler has these main pieces:
 
 the agent package detects GPUs at startup. it uses CGo to call C code that reads hardware info.
 
-on macOS it uses `sysctl` to find Apple Silicon GPUs. on Linux it scans the PCI bus for NVIDIA, AMD, and Intel GPUs.
+on macOS it uses `sysctl` to find Apple Silicon GPUs. on Linux it uses vendor monitoring APIs where possible, with fallbacks such as AMDGPU sysfs for Radeon/APU devices that are visible through `/sys/class/drm`.
 
 it only detects one vendor at a time. whatever GPU is in the system first, that is what the scheduler uses. no multi-vendor pool. if you have NVIDIA it uses NVIDIA, if you have Apple Silicon it uses Apple.
 
