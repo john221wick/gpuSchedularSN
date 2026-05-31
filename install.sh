@@ -4,6 +4,18 @@ set -euo pipefail
 REPO="john221wick/gpuSchedularSN"
 BASE_URL="https://github.com/${REPO}/releases/latest/download"
 MODE="desktop"
+CLEANUP_PATHS=("")
+
+cleanup() {
+  local path
+  for path in "${CLEANUP_PATHS[@]}"; do
+    if [ -n "$path" ]; then
+      rm -rf "$path"
+    fi
+  done
+}
+
+trap cleanup EXIT
 
 usage() {
   cat <<'EOF'
@@ -87,6 +99,10 @@ download() {
   curl -fsSL "$url" -o "$output"
 }
 
+make_tmpdir() {
+  mktemp -d
+}
+
 install_desktop() {
   local os="$1"
   local arch="$2"
@@ -97,8 +113,8 @@ install_desktop() {
     need_cmd tar
     need_cmd ditto
     local tmpdir
-    tmpdir="$(mktemp -d)"
-    trap 'rm -rf "$tmpdir"' EXIT
+    tmpdir="$(make_tmpdir)"
+    CLEANUP_PATHS+=("$tmpdir")
 
     download "${BASE_URL}/gpusched-desktop-darwin-${arch}.tar.gz" "$tmpdir/gpusched-desktop.tar.gz"
     tar -xzf "$tmpdir/gpusched-desktop.tar.gz" -C "$tmpdir"
@@ -145,8 +161,8 @@ install_cli() {
   need_cmd curl
 
   local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  tmpdir="$(make_tmpdir)"
+  CLEANUP_PATHS+=("$tmpdir")
 
   download "${BASE_URL}/gpusched-${os}-${arch}" "$tmpdir/gpusched"
   chmod +x "$tmpdir/gpusched"
