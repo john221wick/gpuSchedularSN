@@ -18,9 +18,9 @@ This project evolved from [gpu-orchestrator](https://github.com/john221wick/gpu-
 
 ## Installation
 
-### Desktop App (Recommended)
+### Desktop App (Install or Update First)
 
-Install the desktop app first if you want GPU Scheduler to appear as a normal desktop application.
+Install or update the desktop app first if you want GPU Scheduler to appear as a normal desktop application. Re-run the same command whenever you want to update the desktop app to the latest release.
 
 **macOS (Intel/Apple Silicon):**
 ```bash
@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/ins
 
 ### CLI Command (Optional)
 
-Install the CLI if you also want to run GPU Scheduler from a terminal.
+Install the CLI only if you also want to run GPU Scheduler from a terminal.
 
 **macOS (Intel/Apple Silicon):**
 ```bash
@@ -49,6 +49,15 @@ curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/ins
 ```
 
 **Windows:** CLI binary coming soon. Build from source for now.
+
+### Desktop App + CLI
+
+Install or update both with one command. The installer updates the desktop app first, then installs the CLI command.
+
+**macOS and Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash -s -- --both
+```
 
 
 ## Features (UI)
