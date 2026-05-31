@@ -1,5 +1,5 @@
 BUILD_DIR = build
-RELEASE_DIR = release
+RELEASE_DIR ?= release
 CLI_BINARY = gpusched
 CLI_MOCK_BINARY = gpusched_mock
 DESKTOP_BINARY = gpusched-desktop
