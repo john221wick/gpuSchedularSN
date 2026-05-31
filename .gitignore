@@ -20,6 +20,7 @@ a.out
 
 # Build output
 build/
+release/gpusched-desktop-*
 
 # Wails embed placeholder (real dist is built by wails build)
 cmd/desktop/frontend/

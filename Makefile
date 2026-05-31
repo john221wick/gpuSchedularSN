@@ -1,9 +1,25 @@
 BUILD_DIR = build
+RELEASE_DIR = release
 CLI_BINARY = gpusched
 CLI_MOCK_BINARY = gpusched_mock
 DESKTOP_BINARY = gpusched-desktop
+DESKTOP_APP_BUNDLE = gpusched.app
+HOST_OS = $(shell go env GOOS)
 
-.PHONY: cli cli-mock desktop clean test frontend
+ifeq ($(HOST_OS),darwin)
+DEFAULT_DESKTOP_PLATFORMS = darwin/amd64 darwin/arm64
+else ifeq ($(HOST_OS),linux)
+DEFAULT_DESKTOP_PLATFORMS = linux/amd64 linux/arm64
+else
+DEFAULT_DESKTOP_PLATFORMS =
+endif
+
+DESKTOP_PLATFORMS ?= $(DEFAULT_DESKTOP_PLATFORMS)
+CLI_RELEASE_ASSETS = $(RELEASE_DIR)/gpusched-linux-amd64 $(RELEASE_DIR)/gpusched-linux-arm64 $(RELEASE_DIR)/gpusched-darwin-amd64 $(RELEASE_DIR)/gpusched-darwin-arm64
+DESKTOP_RELEASE_ASSETS = $(foreach platform,$(DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))$(if $(filter darwin/%,$(platform)),.tar.gz,))
+RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
+
+.PHONY: cli cli-mock desktop desktop-release cli-release clean test frontend
 
 # --- CLI (existing) ---
 
@@ -33,6 +49,37 @@ desktop-dev:
 desktop-mock:
 	cd cmd/desktop && wails dev -tags mock
 
+# --- Release Artifacts ---
+
+desktop-release:
+	@if [ -z "$(DESKTOP_PLATFORMS)" ]; then \
+		echo "Desktop release builds are supported from macOS or Linux hosts only."; \
+		exit 1; \
+	fi
+	@mkdir -p $(RELEASE_DIR)
+	@set -e; \
+	for platform in $(DESKTOP_PLATFORMS); do \
+		os=$${platform%/*}; \
+		arch=$${platform#*/}; \
+		echo "Building desktop app for $$os/$$arch..."; \
+		( cd cmd/desktop && wails build -clean -platform $$os/$$arch -o $(DESKTOP_BINARY) ); \
+		if [ "$$os" = "darwin" ]; then \
+			test -d "cmd/desktop/build/bin/$(DESKTOP_APP_BUNDLE)" || { echo "Missing Wails app bundle: cmd/desktop/build/bin/$(DESKTOP_APP_BUNDLE)"; exit 1; }; \
+			tar -czf "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch.tar.gz" -C cmd/desktop/build/bin $(DESKTOP_APP_BUNDLE); \
+		else \
+			test -f "cmd/desktop/build/bin/$(DESKTOP_BINARY)" || { echo "Missing Wails desktop binary: cmd/desktop/build/bin/$(DESKTOP_BINARY)"; exit 1; }; \
+			cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch"; \
+			chmod +x "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch"; \
+		fi; \
+	done
+
+cli-release:
+	@mkdir -p $(RELEASE_DIR)
+	@echo "Building CLI binaries..."
+	@GOOS=linux GOARCH=amd64 go build -tags mock -o $(RELEASE_DIR)/gpusched-linux-amd64 ./cmd/
+	@GOOS=linux GOARCH=arm64 go build -tags mock -o $(RELEASE_DIR)/gpusched-linux-arm64 ./cmd/
+	@GOOS=darwin GOARCH=amd64 go build -tags mock -o $(RELEASE_DIR)/gpusched-darwin-amd64 ./cmd/
+	@GOOS=darwin GOARCH=arm64 go build -tags mock -o $(RELEASE_DIR)/gpusched-darwin-arm64 ./cmd/
 
 # --- Test ---
 
@@ -47,7 +94,7 @@ test-mock:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf frontend/.svelte-kit frontend/build
-	rm -rf release
+	rm -rf $(RELEASE_DIR)
 
 # --- Version Management ---
 
@@ -91,12 +138,10 @@ release:
 	$(MAKE) _build-and-release NEW_VERSION=$$NEW_VERSION
 
 _build-and-release:
-	@echo "Building binaries for v$(NEW_VERSION)..."
-	@rm -rf release && mkdir -p release
-	@GOOS=linux GOARCH=amd64 go build -tags mock -o release/gpusched-linux-amd64 ./cmd/
-	@GOOS=linux GOARCH=arm64 go build -tags mock -o release/gpusched-linux-arm64 ./cmd/
-	@GOOS=darwin GOARCH=amd64 go build -tags mock -o release/gpusched-darwin-amd64 ./cmd/
-	@GOOS=darwin GOARCH=arm64 go build -tags mock -o release/gpusched-darwin-arm64 ./cmd/
+	@echo "Building release artifacts for v$(NEW_VERSION)..."
+	@rm -rf $(RELEASE_DIR) && mkdir -p $(RELEASE_DIR)
+	@$(MAKE) desktop-release
+	@$(MAKE) cli-release
 	@echo "Committing version bump..."
 	@git add $(VERSION_FILE)
 	@git commit -m "Bump version to v$(NEW_VERSION)"
@@ -106,8 +151,5 @@ _build-and-release:
 	@gh release create v$(NEW_VERSION) \
 		--title "v$(NEW_VERSION)" \
 		--notes "Release v$(NEW_VERSION)" \
-		release/gpusched-linux-amd64 \
-		release/gpusched-linux-arm64 \
-		release/gpusched-darwin-amd64 \
-		release/gpusched-darwin-arm64
+		$(RELEASE_ASSETS)
 	@echo "✓ Released v$(NEW_VERSION)"

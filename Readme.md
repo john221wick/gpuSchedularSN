@@ -1,6 +1,6 @@
 # GPU Scheduler Single Node
 
-A high-performance GPU scheduler that optimizes resource utilization across multiple interconnects (NVLink, NVSwitch, XeLink, PCIe). Built as a single executable with both CLI and desktop GUI interfaces.
+A high-performance GPU scheduler that optimizes resource utilization across multiple interconnects (NVLink, NVSwitch, XeLink, PCIe). Available as a desktop app with a companion CLI for terminal workflows.
 
 ## Overview
 
@@ -18,19 +18,37 @@ This project evolved from [gpu-orchestrator](https://github.com/john221wick/gpu-
 
 ## Installation
 
-### Quick Install (Binary)
+### Desktop App (Recommended)
 
-**Linux (amd64/arm64):**
-```bash
-curl -fsSL https://github.com/john221wick/gpuSchedularSN/releases/latest/download/gpusched-linux-$(uname -m) -o /usr/local/bin/gpusched && chmod +x /usr/local/bin/gpusched
-```
+Install the desktop app first if you want GPU Scheduler to appear as a normal desktop application.
 
 **macOS (Intel/Apple Silicon):**
 ```bash
-curl -fsSL https://github.com/john221wick/gpuSchedularSN/releases/latest/download/gpusched-darwin-$(uname -m) -o /usr/local/bin/gpusched && chmod +x /usr/local/bin/gpusched
+curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash
 ```
 
-**Windows:** Build from source (Windows binary coming soon)
+**Linux (amd64/arm64):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash
+```
+
+**Windows:** Desktop installer coming soon. Build from source for now.
+
+### CLI Command (Optional)
+
+Install the CLI if you also want to run GPU Scheduler from a terminal.
+
+**macOS (Intel/Apple Silicon):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash -s -- --cli
+```
+
+**Linux (amd64/arm64):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash -s -- --cli
+```
+
+**Windows:** CLI binary coming soon. Build from source for now.
 
 
 ## Features (UI)
