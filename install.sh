@@ -4,18 +4,6 @@ set -euo pipefail
 REPO="john221wick/gpuSchedularSN"
 BASE_URL="https://github.com/${REPO}/releases/latest/download"
 MODE="desktop"
-CLEANUP_PATHS=("")
-
-cleanup() {
-  local path
-  for path in "${CLEANUP_PATHS[@]}"; do
-    if [ -n "$path" ]; then
-      rm -rf "$path"
-    fi
-  done
-}
-
-trap cleanup EXIT
 
 usage() {
   cat <<'EOF'
@@ -99,10 +87,6 @@ download() {
   curl -fsSL "$url" -o "$output"
 }
 
-make_tmpdir() {
-  mktemp -d
-}
-
 install_desktop() {
   local os="$1"
   local arch="$2"
@@ -113,14 +97,14 @@ install_desktop() {
     need_cmd tar
     need_cmd ditto
     local tmpdir
-    tmpdir="$(make_tmpdir)"
-    CLEANUP_PATHS+=("$tmpdir")
+    tmpdir="$(mktemp -d)"
 
     download "${BASE_URL}/gpusched-desktop-darwin-${arch}.tar.gz" "$tmpdir/gpusched-desktop.tar.gz"
     tar -xzf "$tmpdir/gpusched-desktop.tar.gz" -C "$tmpdir"
     run_as_root ditto "$tmpdir/gpusched.app" /Applications/gpusched.app
     echo "Installed GPU Scheduler desktop app to /Applications/gpusched.app"
     open /Applications/gpusched.app >/dev/null 2>&1 || true
+    rm -rf "$tmpdir"
     return
   fi
 
@@ -161,14 +145,14 @@ install_cli() {
   need_cmd curl
 
   local tmpdir
-  tmpdir="$(make_tmpdir)"
-  CLEANUP_PATHS+=("$tmpdir")
+  tmpdir="$(mktemp -d)"
 
   download "${BASE_URL}/gpusched-${os}-${arch}" "$tmpdir/gpusched"
   chmod +x "$tmpdir/gpusched"
   run_as_root mkdir -p /usr/local/bin
   run_as_root cp "$tmpdir/gpusched" /usr/local/bin/gpusched
   echo "Installed gpusched CLI to /usr/local/bin/gpusched"
+  rm -rf "$tmpdir"
 }
 
 main() {
