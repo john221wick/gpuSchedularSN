@@ -32,47 +32,8 @@ curl -fsSL https://github.com/john221wick/gpuSchedularSN/releases/latest/downloa
 
 **Windows:** Build from source (Windows binary coming soon)
 
-### Build from Source
 
-Requires Go 1.21+ and Make.
-
-```bash
-git clone https://github.com/john221wick/gpuSchedularSN.git
-cd gpuSchedularSN
-
-# Build CLI with real GPU detection
-make cli
-
-# Build CLI with mock GPUs (for testing)
-make cli-mock
-
-# Build desktop app (requires Wails v2)
-make desktop
-```
-
-## Quick Start
-
-```bash
-# List detected GPUs
-gpusched devices
-
-# View GPU topology and interconnects
-gpusched topo
-
-# Run a job on 2 GPUs with 40GB VRAM each
-gpusched run --gpus 2 --vram 40g -- python train.py
-
-# Check job status
-gpusched status
-
-# View job logs
-gpusched logs <job-id>
-
-# Kill a running job
-gpusched kill <job-id>
-```
-
-## Features
+## Features (UI)
 
 ### Dashboard
 Real-time overview of your GPU cluster with auto-refresh every 2 seconds. Shows total GPUs, free GPUs, running jobs, queued jobs, average utilization, and VRAM usage.
@@ -117,6 +78,30 @@ For detailed documentation including architecture, API reference, cluster setup,
 
 - [Development Phases](https://john221wick.github.io/gpuSchedularSN/development-phases.html) - Step-by-step evolution of the project
 - [Technical Decisions](https://john221wick.github.io/gpuSchedularSN/technical-decisions.html) - Why Go + embedded C, topology scoring, and more
+
+## Quick Start
+
+```bash
+# List detected GPUs
+gpusched devices
+
+# View GPU topology and interconnects
+gpusched topo
+
+# Run a job on 2 GPUs with 40GB VRAM each
+gpusched run --gpus 2 --vram 40g -- python train.py
+
+# Check job status
+gpusched status
+
+# View job logs
+gpusched logs <job-id>
+
+# Kill a running job
+gpusched kill <job-id>
+```
+
+
 
 ## Supported GPUs
 
