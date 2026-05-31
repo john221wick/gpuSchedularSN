@@ -19,7 +19,7 @@ CLI_RELEASE_ASSETS = $(RELEASE_DIR)/gpusched-linux-amd64 $(RELEASE_DIR)/gpusched
 DESKTOP_RELEASE_ASSETS = $(foreach platform,$(DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))$(if $(filter darwin/%,$(platform)),.tar.gz,))
 RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
 
-.PHONY: cli cli-mock desktop desktop-release cli-release clean test frontend
+.PHONY: cli cli-mock desktop desktop-release cli-release build clean test frontend sync-desktop-frontend
 
 # --- CLI (existing) ---
 
@@ -38,10 +38,15 @@ $(BUILD_DIR)/$(CLI_MOCK_BINARY):
 # --- Desktop (Wails) ---
 
 frontend:
-	cd frontend && pnpm install && pnpm build
+	cd frontend && CI=true pnpm install && pnpm build
 
-desktop: frontend
-	cd cmd/desktop && wails build -o ../../$(BUILD_DIR)/$(DESKTOP_BINARY)
+sync-desktop-frontend: frontend
+	rm -rf cmd/desktop/frontend/dist
+	mkdir -p cmd/desktop/frontend
+	cp -R frontend/dist cmd/desktop/frontend/dist
+
+desktop: sync-desktop-frontend
+	cd cmd/desktop && wails build -s -o ../../$(BUILD_DIR)/$(DESKTOP_BINARY)
 
 desktop-dev:
 	cd cmd/desktop && wails dev
@@ -51,7 +56,9 @@ desktop-mock:
 
 # --- Release Artifacts ---
 
-desktop-release:
+build: desktop-release cli-release
+
+desktop-release: sync-desktop-frontend
 	@if [ -z "$(DESKTOP_PLATFORMS)" ]; then \
 		echo "Desktop release builds are supported from macOS or Linux hosts only."; \
 		exit 1; \
@@ -62,7 +69,7 @@ desktop-release:
 		os=$${platform%/*}; \
 		arch=$${platform#*/}; \
 		echo "Building desktop app for $$os/$$arch..."; \
-		( cd cmd/desktop && wails build -clean -platform $$os/$$arch -o $(DESKTOP_BINARY) ); \
+		( cd cmd/desktop && wails build -clean -s -platform $$os/$$arch -o $(DESKTOP_BINARY) ); \
 		if [ "$$os" = "darwin" ]; then \
 			test -d "cmd/desktop/build/bin/$(DESKTOP_APP_BUNDLE)" || { echo "Missing Wails app bundle: cmd/desktop/build/bin/$(DESKTOP_APP_BUNDLE)"; exit 1; }; \
 			tar -czf "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch.tar.gz" -C cmd/desktop/build/bin $(DESKTOP_APP_BUNDLE); \
