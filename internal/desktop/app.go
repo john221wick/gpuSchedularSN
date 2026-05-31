@@ -301,7 +301,13 @@ func (a *App) ConnectNode(sshCommand string, keyPath string, mockMode bool) (Nod
 	client := cluster.NewAgentClient(fmt.Sprintf("http://localhost:%d", localPort))
 	nodeID := fmt.Sprintf("ssh-%s-%d", config.Host, config.Port)
 
-	node, err := a.manager.AddRemoteNode(nodeID, config.Host, client)
+	// Use detected hostname if available, otherwise fall back to SSH host
+	nodeName := remoteInfo.Hostname
+	if nodeName == "" {
+		nodeName = config.Host
+	}
+
+	node, err := a.manager.AddRemoteNode(nodeID, nodeName, client)
 	if err != nil {
 		session.Close()
 		return NodeInfo{}, fmt.Errorf("add node failed: %w", err)

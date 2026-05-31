@@ -166,7 +166,7 @@
 				<!-- Node header -->
 				<div class="flex items-center gap-2.5 px-4 py-3" style="border-bottom: 1px solid var(--border);">
 					<div class="w-2 h-2 rounded-full" style="background: {node.reachable ? '#3fb950' : '#f85149'};"></div>
-					<span class="text-[13.5px] font-semibold" style="color: var(--text-primary);">{node.nodeName || node.nodeID}</span>
+					<span class="text-[13.5px] font-semibold" style="color: var(--text-primary);">{node.nodeName}</span>
 					{#if node.host?.hostname}
 						<span class="text-[12px] font-[JetBrains_Mono,monospace]" style="color: var(--text-muted);">{node.host.hostname}</span>
 					{/if}

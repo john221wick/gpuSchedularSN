@@ -155,6 +155,7 @@ func (s *SSHSession) RunCommand(cmd string) (string, error) {
 
 // RemoteInfo holds auto-detected info about remote machine.
 type RemoteInfo struct {
+	Hostname  string // machine hostname
 	Arch      string // x86_64, aarch64
 	GoArch    string // amd64, arm64
 	GPUVendor string // nvidia, amd, intel, none
@@ -166,6 +167,10 @@ type RemoteInfo struct {
 // DetectRemote auto-detects remote machine capabilities.
 func (s *SSHSession) DetectRemote() (*RemoteInfo, error) {
 	info := &RemoteInfo{}
+
+	// Hostname
+	hostnameOut, _ := s.RunCommand("hostname")
+	info.Hostname = strings.TrimSpace(hostnameOut)
 
 	// Arch
 	archOut, err := s.RunCommand("uname -m")

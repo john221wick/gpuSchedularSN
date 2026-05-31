@@ -366,6 +366,10 @@ func cmdConnect(args []string) {
 	remoteBase := "~/gpuschedular"
 	session.RunCommand(fmt.Sprintf("mkdir -p %s/logs", remoteBase))
 
+	// Detect hostname
+	hostnameOut, _ := session.RunCommand("hostname")
+	hostname := strings.TrimSpace(hostnameOut)
+
 	fmt.Println("SSH connected. Ensuring rsync installed on remote...")
 	session.RunCommand("which rsync > /dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq rsync 2>/dev/null || yum install -y -q rsync 2>/dev/null || apk add rsync 2>/dev/null || true)")
 
@@ -389,7 +393,14 @@ func cmdConnect(args []string) {
 
 	client := cluster.NewAgentClient(fmt.Sprintf("http://localhost:%d", localPort))
 	nodeID := fmt.Sprintf("ssh-%s-%d", config.Host, config.Port)
-	node, err := ClusterMgr.AddRemoteNode(nodeID, config.Host, client)
+
+	// Use detected hostname if available, otherwise fall back to SSH host
+	nodeName := hostname
+	if nodeName == "" {
+		nodeName = config.Host
+	}
+
+	node, err := ClusterMgr.AddRemoteNode(nodeID, nodeName, client)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error adding node: %v\n", err)
 		os.Exit(1)

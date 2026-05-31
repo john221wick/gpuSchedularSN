@@ -59,7 +59,7 @@
 							</div>
 						</td>
 						{#if remoteMode}
-							<td class="px-4 py-3 text-[12px]" style="color: var(--text-secondary);">{gpu.nodeName || gpu.nodeID || '—'}</td>
+							<td class="px-4 py-3 text-[12px]" style="color: var(--text-secondary);">{gpu.nodeName || '—'}</td>
 						{/if}
 						<td class="px-4 py-3">
 							<span class="text-[11px] px-2 py-0.5 rounded font-medium"

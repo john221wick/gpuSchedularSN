@@ -248,7 +248,7 @@
 								<td class="px-4 py-2.5 text-[11px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{job.id.slice(0, 16)}…</td>
 								<td class="px-4 py-2.5 text-[13px] font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{job.command}</td>
 								{#if remoteMode}
-									<td class="px-4 py-2.5 text-[12px]" style="color: var(--text-secondary);">{job.nodeName || job.nodeID || '—'}</td>
+									<td class="px-4 py-2.5 text-[12px]" style="color: var(--text-secondary);">{job.nodeName || '—'}</td>
 								{/if}
 								<td class="px-4 py-2.5">
 									<div class="flex gap-1">

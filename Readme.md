@@ -1,77 +1,138 @@
-# GPU Schedular Single Node
+# GPU Scheduler Single Node
 
-The goal of this project is to make gpu schedular which would save waste of gpu resources via a single exectable that can handle mulitple Interconnects(NVLink, NVSwitch, Xe Link etc).
+A high-performance GPU scheduler that optimizes resource utilization across multiple interconnects (NVLink, NVSwitch, XeLink, PCIe). Built as a single executable with both CLI and desktop GUI interfaces.
 
+## Overview
 
-# Phase 1 done
-1. Added gpu detection - Now it auto detects the gpu on `make run`, so if you want to know about your own computer, just type make run. It will work
-2. Fake gpu - For running in Nvidia gpus, i have added **gpu_fake.c** file, which containes four A100(80GB) and there is 2 NVLink, and 4 pcie connection
-3. Right now - I am running in macos so there is gpu detection in the beginning itself
+GPU Scheduler SN automatically detects your GPU hardware, analyzes interconnect topology, and intelligently schedules jobs to maximize performance. Whether you're running on a single workstation or managing a multi-node cluster, this tool ensures your GPU resources are used efficiently.
 
-# Phase 2 and 3 done
+This project evolved from [gpu-orchestrator](https://github.com/john221wick/gpu-orchestrator), originally written in C++. After exploring different approaches, I rebuilt it in Go with embedded C for better cross-platform support, simpler deployment, and easier cluster management.
 
-1. I added and tested topology matrix, which is basically for gpus which are made basically about connection of gpus to gpus
-2. Added a scorer, which basically finds the best combination of n gpus from the topology matrix with backtracking
+**Key capabilities:**
+- Automatic GPU detection (NVIDIA, AMD, Intel, Apple Silicon)
+- Topology-aware scheduling using bandwidth matrices
+- Priority-based job queue with automatic placement
+- Multi-node cluster support via SSH
+- Real-time monitoring and management
+- Cross-platform support (Linux, macOS, Windows)
 
-# Phase 4 done
+## Installation
 
-1. Added queue to handle the ongoing requests, for now the priority is set by int, lateron i will fix that
+### Quick Install (Binary)
 
-# Phase 5 done
+**Linux (amd64/arm64):**
+```bash
+curl -fsSL https://github.com/john221wick/gpuSchedularSN/releases/latest/download/gpusched-linux-$(uname -m) -o /usr/local/bin/gpusched && chmod +x /usr/local/bin/gpusched
+```
 
-1. Added a central state struct that ties everything together - topology, queue, running jobs, and which GPUs are allocated. All thread safe with a mutex
-2. You can submit a job to the queue, allocate GPUs to it, free them when done, and check which GPUs are free
+**macOS (Intel/Apple Silicon):**
+```bash
+curl -fsSL https://github.com/john221wick/gpuSchedularSN/releases/latest/download/gpusched-darwin-$(uname -m) -o /usr/local/bin/gpusched && chmod +x /usr/local/bin/gpusched
+```
 
-# Phase 6 done
+**Windows:** Build from source (Windows binary coming soon)
 
-1. Added a process launcher that actually runs your command. It sets the right env vars based on your GPU vendor - CUDA_VISIBLE_DEVICES for NVIDIA, HIP_VISIBLE_DEVICES for AMD, etc
-2. For Apple it doesnt set anything since there is only one GPU and Metal handles it
-3. Each process runs in its own process group so we can kill it cleanly later (no orphan processes)
-4. It runs async - starts the process and calls a callback when it exits, so the scheduler can keep working while a job is running
+### Build from Source
 
-# Phase 7 done
+Requires Go 1.21+ and Make.
 
-1. Added CLI with subcommands - `gpusched devices`, `topo`, `run`, `status`, `kill`, `version`. No external deps, just os.Args and flag package
-2. The `run` command parses flags before `--` and everything after is the user command. So `gpusched run --gpus 2 -- python train.py` splits into flags (gpus=2) and command (python train.py)
-3. The VRAM flag accepts human readable formats like 40g, 512m, 1000 - converts to MB internally
+```bash
+git clone https://github.com/john221wick/gpuSchedularSN.git
+cd gpuSchedularSN
 
-# Phase 8 done
+# Build CLI with real GPU detection
+make cli
 
-1. Added a background scheduler loop that runs every second. It checks the queue, and if there is a job waiting and enough free GPUs, it automatically picks it up, scores the best GPU group, and launches it
-2. This means you can submit multiple jobs and the scheduler will place them as GPUs free up
+# Build CLI with mock GPUs (for testing)
+make cli-mock
 
-# Phase 10 done
+# Build desktop app (requires Wails v2)
+make desktop
+```
 
-1. Added signal handling - if you press Ctrl+C, it catches SIGINT and kills all running processes cleanly before exiting. No orphan processes left behind
-2. Added the kill command - `gpusched kill <jobID>` finds the running job and kills its entire process group with syscall.Kill
+## Quick Start
 
-# Desktop App done
+```bash
+# List detected GPUs
+gpusched devices
 
-1. Built a desktop app using Wails v2 - it wraps the Svelte frontend in a native window and bridges Go methods to JavaScript
-2. Frontend is Svelte 5 with Tailwind CSS. Has pages for Dashboard, Devices, Topology, Jobs, and Submit
-3. Dashboard auto-refreshes every 2 seconds, shows GPU stats, running jobs, VRAM usage
-4. Dark and light theme toggle, stored in localStorage
+# View GPU topology and interconnects
+gpusched topo
 
-# Technical Decisions i took
+# Run a job on 2 GPUs with 40GB VRAM each
+gpusched run --gpus 2 --vram 40g -- python train.py
 
-When building with Go + CGo, there is a problem. Go scans the package directory for `.c` files even when CGo is disabled (like when you do `go build -tags mock`). So if I put the C files next to the Go files, the mock build breaks. To fix this I put all C files in a subdirectory `internal/agent/gpu/` and reference them from the CGo bridge with `#cgo CFLAGS: -I${SRCDIR}/gpu` and `#include "gpu.c"`.
+# Check job status
+gpusched status
 
-For platform detection, I used `#ifdef __APPLE__` and `#ifdef __linux__` in `gpu.c`. So the same source code detects Apple GPUs on macOS (using sysctl) and scans the PCI bus on Linux for NVIDIA/AMD/Intel. The binary you build on a Mac will detect Apple GPU. The binary you build on Linux will detect whatever GPU is there. One codebase, different behavior at compile time.
+# View job logs
+gpusched logs <job-id>
 
-I chose to detect only one vendor at a time. Whatever GPU is in the system, the scheduler uses that. No multi-vendor pool for now. If you have NVIDIA it uses NVIDIA, if you have Apple Silicon it uses Apple. First detected wins.
+# Kill a running job
+gpusched kill <job-id>
+```
 
-Topology is optional. If there is only 1 GPU (like on Apple Silicon), there is no interconnect to worry about. The scheduler just uses that one GPU directly. For multi-GPU systems it looks at the links between GPUs (NVLink vs PCIe) and picks the best group.
+## Features
 
-For the fake data, I kept `gpu_fake.c` which has 4x A100 with NVLink and PCIe links. This is used for testing the scheduler logic without real hardware. You can run it with `make mock` which builds with `-tags mock` and uses pure Go, no C needed.
+### Dashboard
+Real-time overview of your GPU cluster with auto-refresh every 2 seconds. Shows total GPUs, free GPUs, running jobs, queued jobs, average utilization, and VRAM usage.
 
-For the state struct, I needed one place to hold everything - the topology, the queue, which GPUs are allocated, and what jobs are running. I used maps for the allocated GPUs (gpuID → jobID) so checking if a GPU is free is just a map lookup. Everything is protected by a mutex because later the scheduler loop runs in a goroutine and you dont want race conditions when allocating GPUs.
+![Dashboard](images/dashboard.png)
 
-For the runner, the key thing is CUDA_VISIBLE_DEVICES. When you set this env var, CUDA only sees the GPUs you specify. So if I allocate GPU 0 and 1, I set CUDA_VISIBLE_DEVICES=0,1 and the process only uses those two. AMD has HIP_VISIBLE_DEVICES and Intel has GPU_DEVICE_ORDINAL, same idea. For Apple I dont set anything because there is only one GPU and Metal just uses it. I used Setpgid: true when starting processes so each job gets its own process group. This matters for the kill command later - I can kill the whole group with one syscall.Kill(-pid, SIGKILL) instead of hunting for child processes. The launch function is async - it starts the process and returns immediately. A goroutine waits for the process to exit and calls the onDone callback. This way the scheduler can keep processing other jobs while one is running.
+### GPU Topology Visualization
+Visual representation of GPU interconnects and bandwidth matrix. Helps you understand how your GPUs are connected (NVLink, PCIe, etc.) and which combinations offer the best performance.
 
-For the CLI I used a global state variable so the run, status, and kill commands can share the same state. The run command parses flags before the -- separator and everything after -- is the user command. The VRAM flag accepts human readable formats like 40g, 512m, 1000. I wrote a parser that handles the suffixes and converts to MB. The run command blocks until the job finishes. It submits the job to the state, the scheduler loop picks it up, and run waits on a channel for the done callback. This way the user sees the output and the shell waits for the process.
+![Topology](images/topology.png)
 
-For the scheduler loop, I used a goroutine with a 1-second ticker. Each tick it checks if the top job in the queue can be placed. I used PeekJob to look at the top without popping, so if there arent enough free GPUs the job stays in the queue. Only when the scorer returns a valid group do I pop the job and launch it. The loop also stores the process reference (exec.Cmd) so we can kill it later.
+### Job Queue Management
+Priority-based job queue with real-time status updates. Submit jobs, view running and queued tasks, and manage priorities. The scheduler automatically places jobs on the best GPU combination as resources free up.
 
-For signal handling, I catch SIGINT and SIGTERM in main.go with a goroutine that waits on a signal channel. When it fires, it calls state.Stop() which kills all running process groups and exits cleanly. For the kill command, I used syscall.Kill(-pid, SIGKILL) with the negative PID to kill the entire process group, not just the parent. This is why I used Setpgid: true when launching processes - it creates the process group that we can kill later.
+![Job Queue](images/queue.png)
 
-For the desktop app I used Wails v2 which lets you build desktop apps with Go backend and any web frontend. I went with Svelte because it compiles to vanilla JS so the bundle is tiny, and Tailwind CSS for styling. Every exported method in app.go becomes callable from the Svelte frontend via Wails bindings - no REST API needed, the bridge handles everything. The desktop app embeds the built Svelte dist folder into the Go binary so it ships as one executable.
+### Job Submission
+Simple interface to submit GPU jobs with customizable parameters like number of GPUs, VRAM requirements, and priority. Supports both local and cluster-wide job submission.
+
+![Run Job](images/run-job.png)
+
+### System Monitoring
+Comprehensive monitoring of CPU, memory, GPU utilization, Docker containers, and running processes across all connected nodes. Expandable panels show detailed metrics and top processes.
+
+![Monitor](images/monitor.png)
+
+### Built-in Terminal
+Integrated SSH terminal for direct access to remote nodes. Run commands, check logs, and manage your cluster without leaving the app.
+
+![Terminal](images/terminal.png)
+
+### File Synchronization
+Rsync-based file sync to push your code and data to remote nodes before job execution. Configure local and remote paths per node for seamless workflow.
+
+![Rsync](images/rsync.png)
+
+## Documentation
+
+For detailed documentation including architecture, API reference, cluster setup, and technical decisions, visit:
+
+**[https://john221wick.github.io/gpuSchedularSN/](https://john221wick.github.io/gpuSchedularSN/)**
+
+- [Development Phases](https://john221wick.github.io/gpuSchedularSN/development-phases.html) - Step-by-step evolution of the project
+- [Technical Decisions](https://john221wick.github.io/gpuSchedularSN/technical-decisions.html) - Why Go + embedded C, topology scoring, and more
+
+## Supported GPUs
+
+| Vendor | Detection Method | Environment Variable |
+|--------|------------------|---------------------|
+| NVIDIA | nvidia-smi | `CUDA_VISIBLE_DEVICES` |
+| AMD | ROCm | `HIP_VISIBLE_DEVICES` |
+| Intel | GPU metrics | `GPU_DEVICE_ORDINAL` |
+| Apple | Metal/sysctl | Native (single GPU) |
+
+## Supported Interconnects
+
+- **NVLink** (NVIDIA) - Up to 600 GB/s
+- **NVSwitch** (NVIDIA) - Up to 900 GB/s
+- **PCIe** (All vendors) - Up to 64 GB/s
+- **XGMI/Infinity Fabric** (AMD) - Up to 64 GB/s
+- **XeLink** (Intel) - Up to 42 GB/s
+- **Thunderbolt** (Apple) - Up to 10 GB/s
+- **Unified Memory** (Apple Silicon) - N/A

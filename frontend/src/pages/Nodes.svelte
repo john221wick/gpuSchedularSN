@@ -285,7 +285,6 @@
 							<div class="w-2 h-2 rounded-full" style="background: {node.status === 'connected' ? 'rgb(34,197,94)' : 'rgb(239,68,68)'};"></div>
 							<div>
 								<span class="text-[13px] font-medium" style="color: var(--text-primary);">{node.name}</span>
-								<span class="text-[11px] font-[JetBrains_Mono,monospace] ml-2" style="color: var(--text-muted);">{node.id}</span>
 							</div>
 							<span class="text-[11px] px-2 py-0.5 rounded font-medium"
 								style="background: {node.status === 'connected' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)'}; color: {node.status === 'connected' ? 'rgb(34,197,94)' : 'rgb(239,68,68)'};">

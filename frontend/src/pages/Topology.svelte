@@ -55,9 +55,6 @@
 				<div class="space-y-4">
 					<div class="flex items-center gap-2">
 						<h2 class="text-[14px] font-semibold" style="color: var(--text-primary);">{node.nodeName}</h2>
-						<span class="text-[11px] font-[JetBrains_Mono,monospace] px-2 py-0.5 rounded" style="background: var(--bg-tertiary); color: var(--text-tertiary);">
-							{node.nodeID}
-						</span>
 						<span class="text-[12px]" style="color: var(--text-secondary);">{node.numGPUs} GPUs</span>
 					</div>
 
