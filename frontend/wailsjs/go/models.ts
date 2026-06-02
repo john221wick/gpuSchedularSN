@@ -320,6 +320,7 @@ export namespace desktop {
 	export class JobInfo {
 	    id: string;
 	    command: string;
+	    mode: string;
 	    numGPUs: number;
 	    minVRAMMB: number;
 	    priority: number;
@@ -338,6 +339,7 @@ export namespace desktop {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.command = source["command"];
+	        this.mode = source["mode"];
 	        this.numGPUs = source["numGPUs"];
 	        this.minVRAMMB = source["minVRAMMB"];
 	        this.priority = source["priority"];
@@ -466,6 +468,7 @@ export namespace desktop {
 	export class SubmitRequest {
 	    command: string;
 	    pathVariable: string;
+	    mode: string;
 	    numGPUs: number;
 	    minVRAMMB: number;
 	    priority: number;
@@ -478,6 +481,7 @@ export namespace desktop {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.command = source["command"];
 	        this.pathVariable = source["pathVariable"];
+	        this.mode = source["mode"];
 	        this.numGPUs = source["numGPUs"];
 	        this.minVRAMMB = source["minVRAMMB"];
 	        this.priority = source["priority"];

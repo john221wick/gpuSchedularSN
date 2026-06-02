@@ -246,7 +246,15 @@
 								onmouseenter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'}
 								onmouseleave={(e) => e.currentTarget.style.background = 'none'}>
 								<td class="px-4 py-2.5 text-[11px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{job.id.slice(0, 16)}…</td>
-								<td class="px-4 py-2.5 text-[13px] font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{job.command}</td>
+								<td class="px-4 py-2.5" style="color: var(--text-primary);">
+										<div class="flex items-center gap-2">
+											<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
+												style="{job.mode === 'inference' ? 'background: rgba(99,102,241,0.15); color: var(--accent);' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'}">
+												{job.mode === 'inference' ? 'Inference' : 'Training'}
+											</span>
+											<span class="text-[13px] font-[JetBrains_Mono,monospace] break-all">{job.command}</span>
+										</div>
+									</td>
 								{#if remoteMode}
 									<td class="px-4 py-2.5 text-[12px]" style="color: var(--text-secondary);">{job.nodeName || '—'}</td>
 								{/if}
@@ -336,7 +344,15 @@
 									onmouseenter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'}
 									onmouseleave={(e) => e.currentTarget.style.background = 'none'}>
 									<td class="px-4 py-2.5 text-[11px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{job.id.slice(0, 16)}…</td>
-									<td class="px-4 py-2.5 text-[13px] font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{job.command}</td>
+									<td class="px-4 py-2.5" style="color: var(--text-primary);">
+										<div class="flex items-center gap-2">
+											<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
+												style="{job.mode === 'inference' ? 'background: rgba(99,102,241,0.15); color: var(--accent);' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'}">
+												{job.mode === 'inference' ? 'Inference' : 'Training'}
+											</span>
+											<span class="text-[13px] font-[JetBrains_Mono,monospace] break-all">{job.command}</span>
+										</div>
+									</td>
 									<td class="px-4 py-2.5">
 										<span class="text-[11px] px-1.5 py-0.5 rounded font-medium"
 											style="{job.status === 'Failed' ? 'background: rgba(239,68,68,0.1); color: rgb(239,68,68);' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'}">
@@ -416,7 +432,15 @@
 									onmouseenter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'}
 									onmouseleave={(e) => e.currentTarget.style.background = 'none'}>
 									<td class="px-4 py-2.5 text-[11px] font-[JetBrains_Mono,monospace]" style="color: var(--text-tertiary);">{job.id.slice(0, 16)}…</td>
-									<td class="px-4 py-2.5 text-[13px] font-[JetBrains_Mono,monospace]" style="color: var(--text-primary);">{job.command}</td>
+									<td class="px-4 py-2.5" style="color: var(--text-primary);">
+										<div class="flex items-center gap-2">
+											<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider"
+												style="{job.mode === 'inference' ? 'background: rgba(99,102,241,0.15); color: var(--accent);' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'}">
+												{job.mode === 'inference' ? 'Inference' : 'Training'}
+											</span>
+											<span class="text-[13px] font-[JetBrains_Mono,monospace] break-all">{job.command}</span>
+										</div>
+									</td>
 									<td class="px-4 py-2.5 text-[13px] font-[JetBrains_Mono,monospace]" style="color: var(--text-secondary);">{job.numGPUs}</td>
 									<td class="px-4 py-2.5 text-[12px] font-[JetBrains_Mono,monospace]" style="color: var(--text-secondary);">
 										{job.minVRAMMB ? (job.minVRAMMB / 1024).toFixed(0) + ' GB' : '—'}

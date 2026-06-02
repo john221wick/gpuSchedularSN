@@ -5,6 +5,7 @@
 
 	let { remoteMode = false } = $props();
 	let command = $state('');
+	let mode = $state('training');
 	let numGPUs = $state(1);
 	let minVRAM = $state(0);
 	let vramUnit = $state('GB');
@@ -39,12 +40,14 @@
 			const jobID = await submitFn({
 				command: String(command),
 				pathVariable: String(commandPath),
+				mode: String(mode),
 				numGPUs: Number(numGPUs),
 				minVRAMMB: Number(minVRAMMB),
 				priority: Number(priority)
 			});
 			success = `Job submitted: ${jobID}`;
 			command = '';
+			mode = 'training';
 			numGPUs = 1;
 			minVRAM = 0;
 			priority = 10;
@@ -96,6 +99,24 @@
 						</span>
 					</div>
 				{/if}
+			</div>
+
+			<div>
+				<label class="block text-[11px] font-medium uppercase tracking-wider mb-1.5" style="color: var(--text-tertiary);">
+					Mode
+				</label>
+				<div class="inline-flex rounded-md p-0.5" style="background: var(--bg-tertiary); border: 1px solid var(--border);">
+					{#each ['training', 'inference'] as m (m)}
+						<button
+							type="button"
+							onclick={() => mode = m}
+							class="cursor-pointer rounded px-3 py-1.5 text-[13px] font-medium capitalize transition-colors"
+							style="background: {mode === m ? 'var(--accent)' : 'transparent'}; color: {mode === m ? 'var(--accent-text)' : 'var(--text-secondary)'};"
+						>
+							{m}
+						</button>
+					{/each}
+				</div>
 			</div>
 
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">

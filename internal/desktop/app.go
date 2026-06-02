@@ -134,6 +134,7 @@ type LinkInfo struct {
 type JobInfo struct {
 	ID          string `json:"id"`
 	Command     string `json:"command"`
+	Mode        string `json:"mode"`
 	NumGPUs     int    `json:"numGPUs"`
 	MinVRAMMB   uint64 `json:"minVRAMMB"`
 	Priority    int    `json:"priority"`
@@ -148,9 +149,19 @@ type JobInfo struct {
 type SubmitRequest struct {
 	Command      string `json:"command"`
 	PathVariable string `json:"pathVariable"`
+	Mode         string `json:"mode"`
 	NumGPUs      int    `json:"numGPUs"`
 	MinVRAMMB    uint64 `json:"minVRAMMB"`
 	Priority     int    `json:"priority"`
+}
+
+// normalizeMode defaults to "training" unless the caller explicitly asked for
+// "inference". Keeps job records consistent regardless of frontend/recovery path.
+func normalizeMode(mode string) string {
+	if mode == "inference" {
+		return "inference"
+	}
+	return "training"
 }
 
 type DashboardInfo struct {
@@ -704,6 +715,7 @@ func (a *App) ClusterSubmitJob(req SubmitRequest) (string, error) {
 	job := &scheduler.Job{
 		ID:        jobID,
 		Command:   command,
+		Mode:      normalizeMode(req.Mode),
 		NumGPUs:   req.NumGPUs,
 		MinVRAMMB: req.MinVRAMMB,
 		Priority:  req.Priority,
@@ -986,6 +998,7 @@ func (a *App) SubmitJob(req SubmitRequest) (string, error) {
 		ID:          jobID,
 		Command:     command,
 		ExecCommand: execCommand,
+		Mode:        normalizeMode(req.Mode),
 		NumGPUs:     req.NumGPUs,
 		MinVRAMMB:   req.MinVRAMMB,
 		Priority:    req.Priority,
@@ -1212,6 +1225,7 @@ func jobToInfo(j *scheduler.Job) JobInfo {
 	return JobInfo{
 		ID:          j.ID,
 		Command:     j.Command,
+		Mode:        normalizeMode(j.Mode),
 		NumGPUs:     j.NumGPUs,
 		MinVRAMMB:   j.MinVRAMMB,
 		Priority:    j.Priority,
@@ -1226,6 +1240,7 @@ func clusterJobToInfo(cj *cluster.ClusterJob) JobInfo {
 	return JobInfo{
 		ID:          cj.ID,
 		Command:     cj.Command,
+		Mode:        normalizeMode(cj.Mode),
 		NumGPUs:     cj.NumGPUs,
 		MinVRAMMB:   cj.MinVRAMMB,
 		Priority:    cj.Priority,

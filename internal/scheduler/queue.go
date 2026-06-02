@@ -33,6 +33,7 @@ type Job struct {
 	ID          string
 	Command     string
 	ExecCommand string
+	Mode        string // "training" (default) or "inference"
 	NumGPUs     int
 	MinVRAMMB   uint64
 	Priority    int
