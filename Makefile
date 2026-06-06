@@ -4,6 +4,8 @@ CLI_BINARY = gpusched
 CLI_MOCK_BINARY = gpusched_mock
 DESKTOP_BINARY = gpusched-desktop
 DESKTOP_APP_BUNDLE = gpusched.app
+DESKTOP_ICON_SOURCE = frontend/static/gpu2.png
+DESKTOP_ICON = cmd/desktop/build/appicon.png
 HOST_OS = $(shell go env GOOS)
 
 ifeq ($(HOST_OS),darwin)
@@ -19,7 +21,7 @@ CLI_RELEASE_ASSETS = $(RELEASE_DIR)/gpusched-linux-amd64 $(RELEASE_DIR)/gpusched
 DESKTOP_RELEASE_ASSETS = $(foreach platform,$(DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))$(if $(filter darwin/%,$(platform)),.tar.gz,))
 RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
 
-.PHONY: cli cli-mock desktop desktop-release cli-release build clean test frontend sync-desktop-frontend
+.PHONY: cli cli-mock desktop desktop-release cli-release build clean test frontend sync-desktop-frontend sync-desktop-icon
 
 # --- CLI (existing) ---
 
@@ -40,25 +42,34 @@ $(BUILD_DIR)/$(CLI_MOCK_BINARY):
 frontend:
 	cd frontend && CI=true pnpm install && pnpm build
 
+sync-desktop-icon:
+	@test -f "$(DESKTOP_ICON_SOURCE)" || { echo "Missing desktop icon: $(DESKTOP_ICON_SOURCE)"; exit 1; }
+	@mkdir -p cmd/desktop/build
+	@if command -v sips >/dev/null 2>&1; then \
+		sips -z 1024 1024 "$(DESKTOP_ICON_SOURCE)" --out "$(DESKTOP_ICON)" >/dev/null; \
+	else \
+		cp "$(DESKTOP_ICON_SOURCE)" "$(DESKTOP_ICON)"; \
+	fi
+
 sync-desktop-frontend: frontend
 	rm -rf cmd/desktop/frontend/dist
 	mkdir -p cmd/desktop/frontend
 	cp -R frontend/dist cmd/desktop/frontend/dist
 
-desktop: sync-desktop-frontend
+desktop: sync-desktop-icon sync-desktop-frontend
 	cd cmd/desktop && wails build -s -o ../../$(BUILD_DIR)/$(DESKTOP_BINARY)
 
-desktop-dev:
+desktop-dev: sync-desktop-icon
 	cd cmd/desktop && wails dev
 
-desktop-mock:
+desktop-mock: sync-desktop-icon
 	cd cmd/desktop && wails dev -tags mock
 
 # --- Release Artifacts ---
 
 build: desktop-release cli-release
 
-desktop-release: sync-desktop-frontend
+desktop-release: sync-desktop-icon sync-desktop-frontend
 	@if [ -z "$(DESKTOP_PLATFORMS)" ]; then \
 		echo "Desktop release builds are supported from macOS or Linux hosts only."; \
 		exit 1; \

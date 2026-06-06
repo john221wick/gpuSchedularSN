@@ -58,6 +58,23 @@ run_as_root() {
   fi
 }
 
+refresh_macos_app_icon() {
+  local app_path="$1"
+  local lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+  run_as_root touch "$app_path" >/dev/null 2>&1 || true
+
+  if [ -x "$lsregister" ]; then
+    "$lsregister" -f "$app_path" >/dev/null 2>&1 || true
+  fi
+
+  if command -v qlmanage >/dev/null 2>&1; then
+    qlmanage -r cache >/dev/null 2>&1 || true
+  fi
+
+  killall Dock >/dev/null 2>&1 || true
+}
+
 detect_os() {
   case "$(uname -s)" in
     Darwin) echo "darwin" ;;
@@ -102,6 +119,7 @@ install_desktop() {
     download "${BASE_URL}/gpusched-desktop-darwin-${arch}.tar.gz" "$tmpdir/gpusched-desktop.tar.gz"
     tar -xzf "$tmpdir/gpusched-desktop.tar.gz" -C "$tmpdir"
     run_as_root ditto "$tmpdir/gpusched.app" /Applications/gpusched.app
+    refresh_macos_app_icon /Applications/gpusched.app
     echo "Installed GPU Scheduler desktop app to /Applications/gpusched.app"
     open /Applications/gpusched.app >/dev/null 2>&1 || true
     rm -rf "$tmpdir"
