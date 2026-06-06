@@ -535,6 +535,19 @@ export namespace desktop {
 		    return a;
 		}
 	}
+	export class UpdateResult {
+	    status: string;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.message = source["message"];
+	    }
+	}
 
 }
-

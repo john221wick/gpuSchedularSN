@@ -150,6 +150,10 @@ export function SyncFilesToNode(arg1, arg2) {
   return window['go']['desktop']['App']['SyncFilesToNode'](arg1, arg2);
 }
 
+export function UpdateDesktopApp() {
+  return window['go']['desktop']['App']['UpdateDesktopApp']();
+}
+
 export function UpdateQueuedPriority(arg1, arg2) {
   return window['go']['desktop']['App']['UpdateQueuedPriority'](arg1, arg2);
 }

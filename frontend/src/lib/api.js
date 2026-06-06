@@ -44,6 +44,7 @@ import {
 	ClusterKillJob,
 	GetClusterDashboard,
 	GetClusterMonitor,
+	UpdateDesktopApp,
 	// App logs
 	GetAppLogs,
 	GetAppLogCount
@@ -88,6 +89,7 @@ export {
 	ClusterKillJob,
 	GetClusterDashboard,
 	GetClusterMonitor,
+	UpdateDesktopApp,
 	// App logs
 	GetAppLogs,
 	GetAppLogCount

@@ -76,6 +76,8 @@ export function SubmitJob(arg1:desktop.SubmitRequest):Promise<string>;
 
 export function SyncFilesToNode(arg1:string,arg2:string):Promise<string>;
 
+export function UpdateDesktopApp():Promise<desktop.UpdateResult>;
+
 export function UpdateQueuedPriority(arg1:string,arg2:number):Promise<void>;
 
 export function WriteTerminalInput(arg1:string,arg2:string):Promise<void>;

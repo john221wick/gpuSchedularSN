@@ -1,11 +1,14 @@
 <script>
 	import { onMount } from 'svelte';
+	import { UpdateDesktopApp } from '../lib/api.js';
 	import { clearCommandPath, getCommandPath, saveCommandPath } from '../lib/preferences.js';
 
 	let { dark, toggleTheme, remoteMode = false } = $props();
 
 	let commandPath = $state('');
 	let saved = $state(false);
+	let updating = $state(false);
+	let updateStatus = $state('Ready');
 	let saveTimer;
 
 	onMount(() => {
@@ -25,6 +28,21 @@
 		saved = true;
 		clearTimeout(saveTimer);
 		saveTimer = setTimeout(() => { saved = false; }, 1500);
+	}
+
+	async function updateApp() {
+		if (updating) return;
+		updating = true;
+		updateStatus = 'Updating...';
+
+		try {
+			const result = await UpdateDesktopApp();
+			updateStatus = result?.message || 'Update started.';
+		} catch (error) {
+			updateStatus = error?.message || String(error);
+		} finally {
+			updating = false;
+		}
 	}
 </script>
 
@@ -47,6 +65,25 @@
 				style="background: var(--accent); color: var(--accent-text);"
 			>
 				{dark ? 'Light mode' : 'Dark mode'}
+			</button>
+		</div>
+	</section>
+
+	<section class="rounded-lg p-5 space-y-4" style="background: var(--bg-secondary); border: 1px solid var(--border);">
+		<div class="flex items-center justify-between gap-4">
+			<div>
+				<h2 class="text-[13px] font-semibold" style="color: var(--text-primary);">App Update</h2>
+				<p class="text-[12px] mt-0.5 max-w-[420px]" style="color: var(--text-tertiary);">{updateStatus}</p>
+			</div>
+			<button
+				type="button"
+				onclick={updateApp}
+				disabled={updating}
+				aria-busy={updating}
+				class="rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+				style="background: var(--accent); color: var(--accent-text);"
+			>
+				{updating ? 'Updating...' : 'Update now'}
 			</button>
 		</div>
 	</section>
