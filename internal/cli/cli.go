@@ -15,7 +15,7 @@ import (
 	"github.com/john221wick/gpuSchedularSN/internal/state"
 )
 
-const Version = "0.1.4"
+const Version = "0.1.5"
 
 var GlobalState *state.State
 var ClusterMgr *cluster.NodeManager
