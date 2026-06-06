@@ -11,7 +11,8 @@
 	import Terminal from './pages/Terminal.svelte';
 	import Docs from './pages/Docs.svelte';
 	import Monitor from './pages/Monitor.svelte';
-	import appicon from './lib/assets/appicon.png';
+
+	const appicon = '/gpu2.png';
 
 	let page = $state('dashboard');
 	let dark = $state(true);
@@ -19,7 +20,7 @@
 	let collapsed = $state(false);
 	let paletteOpen = $state(false);
 	let query = $state('');
-	let paletteInput;
+	let paletteInput = $state();
 	let isFullscreen = $state(false);
 
 	const routes = {
@@ -221,7 +222,7 @@
 
 			<!-- Nav -->
 			<nav class="flex-1 px-2.5 py-1 overflow-y-auto">
-				{#each sections as section}
+				{#each sections as section, sectionIndex (section.label ?? sectionIndex)}
 					{#if section.label}
 						<div class="text-[10.5px] font-semibold uppercase tracking-[0.08em] px-2.5 pt-4 pb-1" style="color: var(--text-muted);">
 							{section.label}
