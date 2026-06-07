@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GPU Scheduler
+Comment=Topology-aware GPU scheduler
+Exec=gpusched-desktop
+Icon=gpusched-desktop
+Terminal=false
+Categories=Development;System;
+StartupWMClass=gpusched-desktop

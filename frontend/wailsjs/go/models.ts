@@ -535,19 +535,38 @@ export namespace desktop {
 		    return a;
 		}
 	}
-	export class UpdateResult {
+	export class UninstallResult {
 	    status: string;
 	    message: string;
-
+	
 	    static createFrom(source: any = {}) {
-	        return new UpdateResult(source);
+	        return new UninstallResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.status = source["status"];
 	        this.message = source["message"];
 	    }
 	}
+	export class UpdateInfo {
+	    current: string;
+	    latest: string;
+	    available: boolean;
+	    notes: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.available = source["available"];
+	        this.notes = source["notes"];
+	    }
+	}
 
 }
+

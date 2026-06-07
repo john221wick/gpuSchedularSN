@@ -44,7 +44,11 @@ import {
 	ClusterKillJob,
 	GetClusterDashboard,
 	GetClusterMonitor,
-	UpdateDesktopApp,
+	// App update / uninstall
+	GetAppVersion,
+	CheckAppUpdate,
+	DownloadAndApplyUpdate,
+	UninstallDesktopApp,
 	// App logs
 	GetAppLogs,
 	GetAppLogCount
@@ -89,7 +93,11 @@ export {
 	ClusterKillJob,
 	GetClusterDashboard,
 	GetClusterMonitor,
-	UpdateDesktopApp,
+	// App update / uninstall
+	GetAppVersion,
+	CheckAppUpdate,
+	DownloadAndApplyUpdate,
+	UninstallDesktopApp,
 	// App logs
 	GetAppLogs,
 	GetAppLogCount

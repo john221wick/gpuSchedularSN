@@ -3,19 +3,40 @@ set -euo pipefail
 
 REPO="john221wick/gpuSchedularSN"
 BASE_URL="https://github.com/${REPO}/releases/latest/download"
-MODE="desktop"
+# Empty = ask interactively (or default to desktop when no terminal is attached,
+# e.g. fully non-interactive `curl | bash` with no tty).
+MODE=""
 
 usage() {
   cat <<'EOF'
 Usage: install.sh [--desktop|--cli|--both]
 
 Installs GPU Scheduler from the latest GitHub release.
+With no option it auto-detects your OS and asks whether to install the
+Desktop app or the CLI.
 
 Options:
-  --desktop  Install the desktop app (default)
+  --desktop  Install the desktop app
   --cli      Install only the gpusched CLI command
   --both     Install the desktop app and CLI command
 EOF
+}
+
+# Prompt the user to choose Desktop or CLI. Reads from the terminal even when
+# the script itself is piped (curl | bash), via /dev/tty. Falls back to desktop
+# when no terminal is available.
+choose_mode() {
+  if [ ! -r /dev/tty ]; then
+    echo "desktop"
+    return
+  fi
+  local reply=""
+  printf '\n  Install GPU Scheduler:\n    1) Desktop app (default)\n    2) CLI\n  Choose [1/2]: ' > /dev/tty
+  read -r reply < /dev/tty || true
+  case "$reply" in
+    2|cli|CLI)    echo "cli" ;;
+    *)            echo "desktop" ;;
+  esac
 }
 
 while [ "$#" -gt 0 ]; do
@@ -187,9 +208,12 @@ install_desktop() {
   fi
 
   if [ "$os" = "linux" ]; then
+    need_cmd tar
     local bin_dir="$HOME/.local/bin"
-    local app_dir="$HOME/.local/share/applications"
-    local desktop_file="$app_dir/gpusched.desktop"
+    local share_dir="$HOME/.local/share"
+    local app_dir="$share_dir/applications"
+    local icons_dir="$share_dir/icons"
+    local desktop_file="$app_dir/gpusched-desktop.desktop"
 
     local webkit_variant asset_suffix=""
     webkit_variant="$(detect_linux_webkit)"
@@ -197,27 +221,41 @@ install_desktop() {
 
     install_linux_gui_deps "$webkit_variant"
 
-    mkdir -p "$bin_dir" "$app_dir"
-    download "${BASE_URL}/gpusched-desktop-linux-${arch}${asset_suffix}" "$bin_dir/gpusched-desktop"
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    download "${BASE_URL}/gpusched-desktop-linux-${arch}${asset_suffix}.tar.gz" "$tmpdir/pkg.tar.gz"
+    tar -xzf "$tmpdir/pkg.tar.gz" -C "$tmpdir"
+
+    mkdir -p "$bin_dir" "$app_dir" "$icons_dir"
+    cp "$tmpdir/bin/gpusched-desktop" "$bin_dir/gpusched-desktop"
     chmod +x "$bin_dir/gpusched-desktop"
 
-    cat > "$desktop_file" <<EOF
-[Desktop Entry]
-Name=GPU Scheduler
-Comment=Topology-aware GPU scheduler
-Exec=$bin_dir/gpusched-desktop
-Icon=utilities-system-monitor
-Terminal=false
-Type=Application
-Categories=Development;System;
-EOF
+    # Install the app icon into the hicolor theme so the launcher shows it.
+    [ -d "$tmpdir/share/icons" ] && cp -R "$tmpdir/share/icons/." "$icons_dir/" || true
 
-    if command -v update-desktop-database >/dev/null 2>&1; then
-      update-desktop-database "$app_dir" >/dev/null 2>&1 || true
+    # Desktop entry — rewrite Exec/Icon to absolute paths so the menu launcher
+    # and icon work regardless of session PATH or icon-cache state. Drop any
+    # stale launcher from older installs.
+    rm -f "$app_dir/gpusched.desktop"
+    local icon_png="$icons_dir/hicolor/256x256/apps/gpusched-desktop.png"
+    if [ -f "$tmpdir/share/applications/gpusched-desktop.desktop" ]; then
+      sed -e "s|^Exec=.*|Exec=$bin_dir/gpusched-desktop|" \
+          -e "s|^Icon=.*|Icon=$icon_png|" \
+          "$tmpdir/share/applications/gpusched-desktop.desktop" > "$desktop_file"
+      grep -q '^TryExec=' "$desktop_file" || printf 'TryExec=%s\n' "$bin_dir/gpusched-desktop" >> "$desktop_file"
+      chmod 644 "$desktop_file"
     fi
 
+    command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$app_dir" >/dev/null 2>&1 || true
+    command -v gtk-update-icon-cache  >/dev/null 2>&1 && gtk-update-icon-cache -f -t "$icons_dir/hicolor" >/dev/null 2>&1 || true
+
+    rm -rf "$tmpdir"
     echo "Installed GPU Scheduler desktop app to $bin_dir/gpusched-desktop"
-    echo "Installed desktop launcher to $desktop_file"
+    echo "Added to your applications menu (search \"GPU Scheduler\")."
+    case ":$PATH:" in
+      *":$bin_dir:"*) ;;
+      *) echo "Tip: add ~/.local/bin to PATH to launch with: gpusched-desktop" ;;
+    esac
     return
   fi
 }
@@ -244,6 +282,9 @@ main() {
   local arch
   os="$(detect_os)"
   arch="$(detect_arch)"
+
+  # No explicit flag → ask Desktop or CLI.
+  [ -z "$MODE" ] && MODE="$(choose_mode)"
 
   case "$MODE" in
     desktop)

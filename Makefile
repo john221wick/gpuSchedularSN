@@ -6,7 +6,14 @@ DESKTOP_BINARY = gpusched-desktop
 DESKTOP_APP_BUNDLE = gpusched.app
 DESKTOP_ICON_SOURCE = frontend/static/gpu2.png
 DESKTOP_ICON = cmd/desktop/build/appicon.png
+LINUX_DESKTOP_ASSETS = cmd/desktop/build/linux
 HOST_OS = $(shell go env GOOS)
+
+# Version stamped into the desktop binary for the in-app self-updater. Defaults
+# to "dev" (which always reports an update available, for local testing); the
+# release flow passes the real tag. Injected with -ldflags -X.
+DESKTOP_VERSION ?= dev
+DESKTOP_VERSIONPKG = github.com/john221wick/gpuSchedularSN/internal/desktop
 
 # Native desktop builds: only darwin can be built natively (and only on a Mac).
 # Linux desktop is always built via Docker (see desktop-linux-release) because
@@ -24,7 +31,7 @@ CLI_RELEASE_ASSETS = $(RELEASE_DIR)/gpusched-linux-amd64 $(RELEASE_DIR)/gpusched
 DESKTOP_RELEASE_ASSETS = $(foreach platform,$(DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))$(if $(filter darwin/%,$(platform)),.tar.gz,))
 # Each Linux arch ships two binaries: the default (webkit2gtk-4.0) and a
 # -webkit41 variant for newer distros that dropped 4.0 (Ubuntu 24.04+, etc).
-LINUX_DESKTOP_RELEASE_ASSETS = $(foreach platform,$(LINUX_DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform)) $(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))-webkit41)
+LINUX_DESKTOP_RELEASE_ASSETS = $(foreach platform,$(LINUX_DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform)).tar.gz $(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))-webkit41.tar.gz)
 RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(LINUX_DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
 
 .PHONY: cli cli-mock desktop desktop-release desktop-linux-release cli-release build clean test frontend sync-desktop-frontend sync-desktop-icon
@@ -86,7 +93,7 @@ desktop-release: sync-desktop-icon sync-desktop-frontend
 		os=$${platform%/*}; \
 		arch=$${platform#*/}; \
 		echo "Building desktop app for $$os/$$arch..."; \
-		( cd cmd/desktop && wails build -clean -s -platform $$os/$$arch -o $(DESKTOP_BINARY) ); \
+		( cd cmd/desktop && wails build -clean -s -ldflags "-s -w -X $(DESKTOP_VERSIONPKG).Version=$(DESKTOP_VERSION)" -platform $$os/$$arch -o $(DESKTOP_BINARY) ); \
 		if [ "$$os" = "darwin" ]; then \
 			test -d "cmd/desktop/build/bin/$(DESKTOP_APP_BUNDLE)" || { echo "Missing Wails app bundle: cmd/desktop/build/bin/$(DESKTOP_APP_BUNDLE)"; exit 1; }; \
 			tar -czf "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch.tar.gz" -C cmd/desktop/build/bin $(DESKTOP_APP_BUNDLE); \
@@ -115,16 +122,22 @@ desktop-linux-release: sync-desktop-icon sync-desktop-frontend
 		for variant in 40 41; do \
 			if [ "$$variant" = "41" ]; then tags="-tags webkit2_41"; suffix="-webkit41"; else tags=""; suffix=""; fi; \
 			echo "  -> webkit$$variant ($$platform)"; \
+			ldflags="-s -w -X $(DESKTOP_VERSIONPKG).Version=$(DESKTOP_VERSION) -X $(DESKTOP_VERSIONPKG).WebkitSuffix=$$suffix"; \
 			docker run --rm --platform $$platform \
 				-v "$(CURDIR)":/app \
 				-v gpusched-gomod:/go/pkg/mod \
 				-v gpusched-gobuild:/root/.cache/go-build \
 				-w /app/cmd/desktop \
 				$(LINUX_DESKTOP_BUILDER_IMAGE):$$arch \
-				wails build -s -clean $$tags -platform $$platform -o $(DESKTOP_BINARY); \
+				wails build -s -clean $$tags -ldflags "$$ldflags" -platform $$platform -o $(DESKTOP_BINARY); \
 			test -f "cmd/desktop/build/bin/$(DESKTOP_BINARY)" || { echo "Missing Linux desktop binary for $$platform webkit$$variant"; exit 1; }; \
-			cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch$$suffix"; \
-			chmod +x "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch$$suffix"; \
+			pkg="$$(mktemp -d)"; \
+			mkdir -p "$$pkg/bin" "$$pkg/share/applications" "$$pkg/share/icons"; \
+			cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$$pkg/bin/$(DESKTOP_BINARY)"; chmod +x "$$pkg/bin/$(DESKTOP_BINARY)"; \
+			cp "$(LINUX_DESKTOP_ASSETS)/$(DESKTOP_BINARY).desktop" "$$pkg/share/applications/"; \
+			cp -R "$(LINUX_DESKTOP_ASSETS)/hicolor" "$$pkg/share/icons/"; \
+			tar --no-xattrs -czf "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch$$suffix.tar.gz" -C "$$pkg" .; \
+			rm -rf "$$pkg"; \
 		done; \
 	done
 
@@ -195,8 +208,8 @@ release:
 _build-and-release:
 	@echo "Building release artifacts for v$(NEW_VERSION)..."
 	@rm -rf $(RELEASE_DIR) && mkdir -p $(RELEASE_DIR)
-	@$(MAKE) desktop-release
-	@$(MAKE) desktop-linux-release
+	@$(MAKE) desktop-release DESKTOP_VERSION=v$(NEW_VERSION)
+	@$(MAKE) desktop-linux-release DESKTOP_VERSION=v$(NEW_VERSION)
 	@$(MAKE) cli-release
 	@echo "Committing version bump..."
 	@git add $(VERSION_FILE)

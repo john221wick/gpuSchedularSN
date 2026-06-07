@@ -18,46 +18,21 @@ This project evolved from [gpu-orchestrator](https://github.com/john221wick/gpu-
 
 ## Installation
 
-### Desktop App (Install or Update First)
+**macOS & Linux:**
 
-Install or update the desktop app first if you want GPU Scheduler to appear as a normal desktop application. Re-run the same command whenever you want to update the desktop app to the latest release.
-
-**macOS (Intel/Apple Silicon):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash
 ```
 
-**Linux (amd64/arm64):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash
-```
+That's it. The script detects your OS and architecture, then asks whether to
+install the **Desktop app** or the **CLI**, and installs it (pulling any needed
+runtime libraries on Linux). The desktop app can update or uninstall itself
+later from **Settings**.
 
-**Windows:** Desktop installer coming soon. Build from source for now.
+To skip the prompt, pass a flag: `--desktop`, `--cli`, or `--both`, e.g.
+`... | bash -s -- --cli`.
 
-### CLI Command (Optional)
-
-Install the CLI only if you also want to run GPU Scheduler from a terminal.
-
-**macOS (Intel/Apple Silicon):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash -s -- --cli
-```
-
-**Linux (amd64/arm64):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash -s -- --cli
-```
-
-**Windows:** CLI binary coming soon. Build from source for now.
-
-### Desktop App + CLI
-
-Install or update both with one command. The installer updates the desktop app first, then installs the CLI command.
-
-**macOS and Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/john221wick/gpuSchedularSN/main/install.sh | bash -s -- --both
-```
+**Windows:** Build from source for now.
 
 
 ## Features (UI)
