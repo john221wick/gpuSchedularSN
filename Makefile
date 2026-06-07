@@ -22,7 +22,9 @@ LINUX_DESKTOP_PLATFORMS ?= linux/amd64 linux/arm64
 LINUX_DESKTOP_BUILDER_IMAGE = gpusched-linux-builder
 CLI_RELEASE_ASSETS = $(RELEASE_DIR)/gpusched-linux-amd64 $(RELEASE_DIR)/gpusched-linux-arm64 $(RELEASE_DIR)/gpusched-darwin-amd64 $(RELEASE_DIR)/gpusched-darwin-arm64
 DESKTOP_RELEASE_ASSETS = $(foreach platform,$(DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))$(if $(filter darwin/%,$(platform)),.tar.gz,))
-LINUX_DESKTOP_RELEASE_ASSETS = $(foreach platform,$(LINUX_DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform)))
+# Each Linux arch ships two binaries: the default (webkit2gtk-4.0) and a
+# -webkit41 variant for newer distros that dropped 4.0 (Ubuntu 24.04+, etc).
+LINUX_DESKTOP_RELEASE_ASSETS = $(foreach platform,$(LINUX_DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform)) $(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))-webkit41)
 RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(LINUX_DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
 
 .PHONY: cli cli-mock desktop desktop-release desktop-linux-release cli-release build clean test frontend sync-desktop-frontend sync-desktop-icon
@@ -98,8 +100,10 @@ desktop-release: sync-desktop-icon sync-desktop-frontend
 # Linux desktop builds run inside Docker: Wails on Linux requires CGO +
 # webkit2gtk, which cannot be cross-compiled from macOS. The builder image
 # (docker/linux/Dockerfile) bakes the toolchain so this is fast and repeatable.
-# The binary links against webkit2gtk-4.0 — install.sh installs the matching
-# runtime libs (libwebkit2gtk-4.0-37, libgtk-3-0).
+# Two variants are built per arch so every common distro is covered:
+#   default        -> webkit2gtk-4.0 (Ubuntu 20.04/22.04, Debian 11/12)
+#   -webkit41 tag  -> webkit2gtk-4.1 (Ubuntu 24.04+, Debian 13, Fedora 40+, Arch)
+# install.sh detects the host's webkit and downloads the matching binary.
 desktop-linux-release: sync-desktop-icon sync-desktop-frontend
 	@command -v docker >/dev/null 2>&1 || { echo "docker is required to build the Linux desktop app"; exit 1; }
 	@mkdir -p $(RELEASE_DIR)
@@ -108,16 +112,20 @@ desktop-linux-release: sync-desktop-icon sync-desktop-frontend
 		arch=$${platform#*/}; \
 		echo "Building Linux desktop app for $$platform via Docker..."; \
 		docker build --platform $$platform -t $(LINUX_DESKTOP_BUILDER_IMAGE):$$arch docker/linux; \
-		docker run --rm --platform $$platform \
-			-v "$(CURDIR)":/app \
-			-v gpusched-gomod:/go/pkg/mod \
-			-v gpusched-gobuild:/root/.cache/go-build \
-			-w /app/cmd/desktop \
-			$(LINUX_DESKTOP_BUILDER_IMAGE):$$arch \
-			wails build -s -clean -platform $$platform -o $(DESKTOP_BINARY); \
-		test -f "cmd/desktop/build/bin/$(DESKTOP_BINARY)" || { echo "Missing Linux desktop binary for $$platform"; exit 1; }; \
-		cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch"; \
-		chmod +x "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch"; \
+		for variant in 40 41; do \
+			if [ "$$variant" = "41" ]; then tags="-tags webkit2_41"; suffix="-webkit41"; else tags=""; suffix=""; fi; \
+			echo "  -> webkit$$variant ($$platform)"; \
+			docker run --rm --platform $$platform \
+				-v "$(CURDIR)":/app \
+				-v gpusched-gomod:/go/pkg/mod \
+				-v gpusched-gobuild:/root/.cache/go-build \
+				-w /app/cmd/desktop \
+				$(LINUX_DESKTOP_BUILDER_IMAGE):$$arch \
+				wails build -s -clean $$tags -platform $$platform -o $(DESKTOP_BINARY); \
+			test -f "cmd/desktop/build/bin/$(DESKTOP_BINARY)" || { echo "Missing Linux desktop binary for $$platform webkit$$variant"; exit 1; }; \
+			cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch$$suffix"; \
+			chmod +x "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch$$suffix"; \
+		done; \
 	done
 
 cli-release:
