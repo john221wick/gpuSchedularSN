@@ -7,13 +7,14 @@ package agent
 #cgo linux LDFLAGS: -ldl
 #cgo darwin LDFLAGS: -framework IOKit -framework CoreFoundation
 #include "gpu.h"
-#include "vendor/nvidia/nvml.c"
-#include "vendor/amd/rocm.c"
-#include "vendor/amd/sysfs.c"
-#include "vendor/intel/levelzero.c"
-#include "vendor/apple/metal.c"
-#include "gpu.c"
 #include <stdlib.h>
+
+// The implementation .c files are compiled as separate translation units via
+// the *_cgo.c wrapper files in this package directory. They must NOT be
+// #included here: each vendor backend declares file-scope statics with the
+// same names (fn_init, fn_shutdown, ...), and on Linux all backends are active
+// at once, so pulling them into a single TU collides. Keeping one TU per .c
+// makes those statics file-local, which is what they were always meant to be.
 */
 import "C"
 

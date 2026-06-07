@@ -8,20 +8,24 @@ DESKTOP_ICON_SOURCE = frontend/static/gpu2.png
 DESKTOP_ICON = cmd/desktop/build/appicon.png
 HOST_OS = $(shell go env GOOS)
 
+# Native desktop builds: only darwin can be built natively (and only on a Mac).
+# Linux desktop is always built via Docker (see desktop-linux-release) because
+# Wails on Linux needs CGO + webkit2gtk and cannot be cross-compiled from macOS.
 ifeq ($(HOST_OS),darwin)
 DEFAULT_DESKTOP_PLATFORMS = darwin/amd64 darwin/arm64
-else ifeq ($(HOST_OS),linux)
-DEFAULT_DESKTOP_PLATFORMS = linux/amd64 linux/arm64
 else
 DEFAULT_DESKTOP_PLATFORMS =
 endif
 
 DESKTOP_PLATFORMS ?= $(DEFAULT_DESKTOP_PLATFORMS)
+LINUX_DESKTOP_PLATFORMS ?= linux/amd64 linux/arm64
+LINUX_DESKTOP_BUILDER_IMAGE = gpusched-linux-builder
 CLI_RELEASE_ASSETS = $(RELEASE_DIR)/gpusched-linux-amd64 $(RELEASE_DIR)/gpusched-linux-arm64 $(RELEASE_DIR)/gpusched-darwin-amd64 $(RELEASE_DIR)/gpusched-darwin-arm64
 DESKTOP_RELEASE_ASSETS = $(foreach platform,$(DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform))$(if $(filter darwin/%,$(platform)),.tar.gz,))
-RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
+LINUX_DESKTOP_RELEASE_ASSETS = $(foreach platform,$(LINUX_DESKTOP_PLATFORMS),$(RELEASE_DIR)/gpusched-desktop-$(subst /,-,$(platform)))
+RELEASE_ASSETS = $(DESKTOP_RELEASE_ASSETS) $(LINUX_DESKTOP_RELEASE_ASSETS) $(CLI_RELEASE_ASSETS)
 
-.PHONY: cli cli-mock desktop desktop-release cli-release build clean test frontend sync-desktop-frontend sync-desktop-icon
+.PHONY: cli cli-mock desktop desktop-release desktop-linux-release cli-release build clean test frontend sync-desktop-frontend sync-desktop-icon
 
 # --- CLI (existing) ---
 
@@ -67,12 +71,12 @@ desktop-mock: sync-desktop-icon
 
 # --- Release Artifacts ---
 
-build: desktop-release cli-release
+build: desktop-release desktop-linux-release cli-release
 
 desktop-release: sync-desktop-icon sync-desktop-frontend
 	@if [ -z "$(DESKTOP_PLATFORMS)" ]; then \
-		echo "Desktop release builds are supported from macOS or Linux hosts only."; \
-		exit 1; \
+		echo "No native desktop platforms for host '$(HOST_OS)'; skipping (Linux handled by desktop-linux-release)."; \
+		exit 0; \
 	fi
 	@mkdir -p $(RELEASE_DIR)
 	@set -e; \
@@ -89,6 +93,31 @@ desktop-release: sync-desktop-icon sync-desktop-frontend
 			cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch"; \
 			chmod +x "$(RELEASE_DIR)/gpusched-desktop-$$os-$$arch"; \
 		fi; \
+	done
+
+# Linux desktop builds run inside Docker: Wails on Linux requires CGO +
+# webkit2gtk, which cannot be cross-compiled from macOS. The builder image
+# (docker/linux/Dockerfile) bakes the toolchain so this is fast and repeatable.
+# The binary links against webkit2gtk-4.0 — install.sh installs the matching
+# runtime libs (libwebkit2gtk-4.0-37, libgtk-3-0).
+desktop-linux-release: sync-desktop-icon sync-desktop-frontend
+	@command -v docker >/dev/null 2>&1 || { echo "docker is required to build the Linux desktop app"; exit 1; }
+	@mkdir -p $(RELEASE_DIR)
+	@set -e; \
+	for platform in $(LINUX_DESKTOP_PLATFORMS); do \
+		arch=$${platform#*/}; \
+		echo "Building Linux desktop app for $$platform via Docker..."; \
+		docker build --platform $$platform -t $(LINUX_DESKTOP_BUILDER_IMAGE):$$arch docker/linux; \
+		docker run --rm --platform $$platform \
+			-v "$(CURDIR)":/app \
+			-v gpusched-gomod:/go/pkg/mod \
+			-v gpusched-gobuild:/root/.cache/go-build \
+			-w /app/cmd/desktop \
+			$(LINUX_DESKTOP_BUILDER_IMAGE):$$arch \
+			wails build -s -clean -platform $$platform -o $(DESKTOP_BINARY); \
+		test -f "cmd/desktop/build/bin/$(DESKTOP_BINARY)" || { echo "Missing Linux desktop binary for $$platform"; exit 1; }; \
+		cp "cmd/desktop/build/bin/$(DESKTOP_BINARY)" "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch"; \
+		chmod +x "$(RELEASE_DIR)/gpusched-desktop-linux-$$arch"; \
 	done
 
 cli-release:
@@ -159,6 +188,7 @@ _build-and-release:
 	@echo "Building release artifacts for v$(NEW_VERSION)..."
 	@rm -rf $(RELEASE_DIR) && mkdir -p $(RELEASE_DIR)
 	@$(MAKE) desktop-release
+	@$(MAKE) desktop-linux-release
 	@$(MAKE) cli-release
 	@echo "Committing version bump..."
 	@git add $(VERSION_FILE)
