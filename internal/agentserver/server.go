@@ -18,6 +18,7 @@ type AgentServer struct {
 	listener   net.Listener
 	dataDir    string
 	stopSave   chan struct{}
+	sampler    *Sampler
 }
 
 // NewAgentServer creates a new agent server.
@@ -76,13 +77,17 @@ func NewAgentServer(dir string) (*AgentServer, error) {
 		Links:   agent.GetTopology(),
 	}
 
-	handlers := NewHandlers(pm, topoResp)
+	sampler := NewSampler()
+	sampler.Start()
+
+	handlers := NewHandlers(pm, topoResp, sampler)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /topology", handlers.GetTopology)
 	mux.HandleFunc("POST /jobs", handlers.PostJob)
 	mux.HandleFunc("GET /status", handlers.GetStatus)
 	mux.HandleFunc("GET /monitor", handlers.GetMonitor)
+	mux.HandleFunc("GET /monitor/history", handlers.GetMonitorHistory)
 	mux.HandleFunc("GET /logs/{id}", handlers.GetLogs)
 	mux.HandleFunc("DELETE /jobs/{id}", handlers.DeleteJob)
 
@@ -91,6 +96,7 @@ func NewAgentServer(dir string) (*AgentServer, error) {
 		pm:         pm,
 		dataDir:    dataDir,
 		stopSave:   make(chan struct{}),
+		sampler:    sampler,
 	}
 
 	// Periodically save state (survives crashes)
@@ -144,6 +150,7 @@ func (s *AgentServer) periodicSave() {
 }
 
 func (s *AgentServer) Shutdown(ctx context.Context) error {
+	s.sampler.Stop()
 	close(s.stopSave)
 
 	// Save state before shutting down

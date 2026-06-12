@@ -73,18 +73,6 @@ type MonitorResponse struct {
 	CollectedAt  string            `json:"collectedAt"`
 }
 
-// CollectMonitor gathers host + GPU + container stats for this machine.
-func CollectMonitor() MonitorResponse {
-	return MonitorResponse{
-		Host:         collectHostStats(),
-		GPUs:         agent.Refresh(),
-		Containers:   collectContainers(),
-		Processes:    collectProcesses(),
-		GPUProcesses: collectGPUProcesses(),
-		CollectedAt:  time.Now().Format(time.RFC3339),
-	}
-}
-
 // ---- Host stats (Linux /proc; partial on other OSes) ----
 
 func collectHostStats() HostStats {
@@ -103,7 +91,7 @@ func collectHostStats() HostStats {
 	hs.UptimeSeconds = readUptime()
 	hs.MemTotalMB, hs.MemUsedMB = readMem()
 	hs.LoadAvg = readLoadAvg()
-	hs.CPUPercent, hs.PerCoreCPU = readCPUUsage()
+	// CPUPercent/PerCoreCPU are filled by the Sampler from counter deltas.
 	return hs
 }
 
@@ -203,24 +191,6 @@ func readLoadAvg() [3]float64 {
 }
 
 type cpuTimes struct{ idle, total uint64 }
-
-// readCPUUsage samples /proc/stat twice and returns aggregate busy % plus per-core %.
-func readCPUUsage() (aggPct float64, corePct []float64) {
-	agg1, cores1 := readCPUTimes()
-	time.Sleep(150 * time.Millisecond)
-	agg2, cores2 := readCPUTimes()
-
-	aggPct = busyPct(agg1, agg2)
-	n := len(cores1)
-	if len(cores2) < n {
-		n = len(cores2)
-	}
-	corePct = make([]float64, n)
-	for i := 0; i < n; i++ {
-		corePct[i] = busyPct(cores1[i], cores2[i])
-	}
-	return aggPct, corePct
-}
 
 func busyPct(a, b cpuTimes) float64 {
 	dt := float64(b.total - a.total)
@@ -366,42 +336,7 @@ func parseSize(s string) float64 {
 	return f / (1024 * 1024) // assume bytes
 }
 
-// ---- Processes ----
-
-// collectProcesses lists OS processes with CPU% and resident memory (via ps).
-func collectProcesses() []ProcInfo {
-	procs := []ProcInfo{}
-	if runtime.GOOS != "linux" {
-		return procs
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	out, err := exec.CommandContext(ctx, "ps", "-eo", "pid,%cpu,rss,comm",
-		"--no-headers", "--sort=-%cpu").Output()
-	if err != nil {
-		return procs
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		pid, _ := strconv.Atoi(fields[0])
-		cpu, _ := strconv.ParseFloat(fields[1], 64)
-		rssKB, _ := strconv.ParseFloat(fields[2], 64)
-		procs = append(procs, ProcInfo{
-			PID:        pid,
-			Command:    strings.Join(fields[3:], " "),
-			CPUPercent: cpu,
-			MemMB:      rssKB / 1024,
-		})
-		if len(procs) >= 120 {
-			break
-		}
-	}
-	return procs
-}
+// ---- GPU processes ----
 
 // collectGPUProcesses lists processes using a GPU (via nvidia-smi; empty if absent).
 func collectGPUProcesses() []GPUProcInfo {

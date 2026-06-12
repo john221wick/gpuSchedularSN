@@ -9,10 +9,11 @@ import (
 type Handlers struct {
 	pm       *ProcessManager
 	topoResp *TopologyResponse
+	sampler  *Sampler
 }
 
-func NewHandlers(pm *ProcessManager, topoResp *TopologyResponse) *Handlers {
-	return &Handlers{pm: pm, topoResp: topoResp}
+func NewHandlers(pm *ProcessManager, topoResp *TopologyResponse, sampler *Sampler) *Handlers {
+	return &Handlers{pm: pm, topoResp: topoResp, sampler: sampler}
 }
 
 func (h *Handlers) GetTopology(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +50,11 @@ func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetMonitor(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, CollectMonitor())
+	writeJSON(w, http.StatusOK, h.sampler.Latest())
+}
+
+func (h *Handlers) GetMonitorHistory(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.sampler.History())
 }
 
 func (h *Handlers) GetLogs(w http.ResponseWriter, r *http.Request) {
