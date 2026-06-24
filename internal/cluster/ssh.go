@@ -347,32 +347,77 @@ func findProjectRoot(start string) string {
 // baseDir is the working directory (e.g. ~/gpuschedular) where binary, logs, state live.
 // gpuCount is the detected real GPU count — passed as GPUSCHED_MOCK_GPUS env to the mock agent.
 // Uses a pidfile at baseDir/agent.pid to track the process.
+//
+// Startup is hardened against the common failure modes:
+//  1. Pre-clean: kill any stale agent, free the port, drop the stale pidfile.
+//  2. Poll the health endpoint for up to 20s — restoring many persisted jobs can
+//     delay the listen well past 1s, so a single one-shot check races the bind.
+//  3. Fallback: if it still won't come up, a corrupt/oversized state.json stalling
+//     restore is the usual culprit — wipe it and retry once from a clean slate.
 func (s *SSHSession) StartRemoteAgent(port int, baseDir string, gpuCount int) error {
-	pidFile := baseDir + "/agent.pid"
-
-	// Start agent with --dir pointing to baseDir, write pidfile
-	// GPUSCHED_MOCK_GPUS tells the mock agent how many GPUs to report
 	gpuEnv := ""
 	if gpuCount > 0 {
 		gpuEnv = fmt.Sprintf("export GPUSCHED_MOCK_GPUS=%d; ", gpuCount)
 	}
-	cmd := fmt.Sprintf("%snohup %s/gpusched --agent --port %d --dir %s > %s/agent.log 2>&1 & echo $! > %s",
-		gpuEnv, baseDir, port, baseDir, baseDir, pidFile)
-	if _, err := s.RunCommand(cmd); err != nil {
-		return fmt.Errorf("start remote agent: %w", err)
+
+	// attempt boots the agent once and polls until healthy or timeout.
+	attempt := func() error {
+		s.preStartCleanup(port, baseDir)
+
+		pidFile := baseDir + "/agent.pid"
+		cmd := fmt.Sprintf("%snohup %s/gpusched --agent --port %d --dir %s > %s/agent.log 2>&1 & echo $! > %s",
+			gpuEnv, baseDir, port, baseDir, baseDir, pidFile)
+		if _, err := s.RunCommand(cmd); err != nil {
+			return fmt.Errorf("start remote agent: %w", err)
+		}
+		return s.waitAgentHealthy(port, 20*time.Second)
 	}
 
-	// Brief wait then verify
-	time.Sleep(time.Second)
-	verifyCmd := fmt.Sprintf("curl -s localhost:%d/topology > /dev/null 2>&1 && echo ok", port)
-	out, err := s.RunCommand(verifyCmd)
-	if err != nil || !strings.Contains(out, "ok") {
-		logOut, _ := s.RunCommand(fmt.Sprintf("cat %s/agent.log 2>/dev/null | tail -20", baseDir))
-		return fmt.Errorf("remote agent failed to start:\n%s", logOut)
+	if err := attempt(); err != nil {
+		// Fallback: stale/corrupt state.json is the usual cause of a stalled restore.
+		// Wipe it and retry once from a clean slate.
+		s.RunCommand(fmt.Sprintf("rm -f %s/state.json %s/state.json.tmp", baseDir, baseDir))
+		if err2 := attempt(); err2 != nil {
+			logOut, _ := s.RunCommand(fmt.Sprintf("cat %s/agent.log 2>/dev/null | tail -30", baseDir))
+			return fmt.Errorf("remote agent failed to start (after state reset):\n%s", logOut)
+		}
+		fmt.Println("Remote agent recovered after state reset")
 	}
 
 	fmt.Printf("Remote agent started on port %d (dir: %s)\n", port, baseDir)
 	return nil
+}
+
+// preStartCleanup kills any stale agent and frees the port before a fresh start.
+// Every step is best-effort (|| true) — the remote may lack any given tool.
+func (s *SSHSession) preStartCleanup(port int, baseDir string) {
+	pidFile := baseDir + "/agent.pid"
+	// Kill by recorded pid, by command match, and anything still holding the port.
+	s.RunCommand(fmt.Sprintf("kill $(cat %s 2>/dev/null) 2>/dev/null || true", pidFile))
+	s.RunCommand("pkill -f 'gpusched --agent' 2>/dev/null || true")
+	s.RunCommand(fmt.Sprintf("fuser -k %d/tcp 2>/dev/null || true", port))
+	s.RunCommand(fmt.Sprintf("rm -f %s", pidFile))
+	// Give the OS a moment to release the listening socket.
+	time.Sleep(500 * time.Millisecond)
+}
+
+// waitAgentHealthy polls the agent /topology endpoint until it responds or timeout.
+// Probe tries curl, then wget, then a bash /dev/tcp connect — so it works even on
+// minimal images that ship none of the usual HTTP clients.
+func (s *SSHSession) waitAgentHealthy(port int, timeout time.Duration) error {
+	probe := fmt.Sprintf(
+		"curl -s -m 2 localhost:%d/topology >/dev/null 2>&1 && echo ok || "+
+			"wget -q -T 2 -O /dev/null localhost:%d/topology 2>/dev/null && echo ok || "+
+			"(exec 3<>/dev/tcp/localhost/%d && echo ok) 2>/dev/null",
+		port, port, port)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if out, _ := s.RunCommand(probe); strings.Contains(out, "ok") {
+			return nil
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+	return fmt.Errorf("health check timed out after %s", timeout)
 }
 
 // ForwardPort sets up local port forwarding: local random port -> remote port.

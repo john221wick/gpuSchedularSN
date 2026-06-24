@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { SubmitJob, ClusterSubmitJob, GetDevices } from '../lib/api.js';
+	import { SubmitJob, ClusterSubmitJob, GetDevices, GetClusterDevices } from '../lib/api.js';
 	import { getCommandPath } from '../lib/preferences.js';
 
 	let { remoteMode = false } = $props();
@@ -20,7 +20,7 @@
 		commandPath = getCommandPath();
 
 		try {
-			const devices = await GetDevices();
+			const devices = remoteMode ? await GetClusterDevices() : await GetDevices();
 			totalGPUs = devices.length;
 		} catch (e) {
 			console.error('Failed to get devices:', e);
